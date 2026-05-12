@@ -48,8 +48,8 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
           </h2>
           <p className="text-gray-600">
             {isSignUp
-              ? 'Start earning with every referral'
-              : 'Sign in to access your dashboard'}
+              ? 'Save stays, book trips, or list your property'
+              : 'Sign in to access trips, hosting, and payouts'}
           </p>
         </div>
 
@@ -104,7 +104,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
                 placeholder="Enter referrer's code"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Join someone's network and help them earn
+                Optional for hosts joining through the partner program
               </p>
             </div>
           )}

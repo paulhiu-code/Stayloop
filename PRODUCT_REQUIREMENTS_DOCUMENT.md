@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD)
 
-## StayLoop - Multi-Level Referral Vacation Rental Platform
+## StayLoop - Consumer-First Vacation Rental Marketplace
 
 **Version:** 1.0
 **Last Updated:** October 13, 2025
@@ -11,17 +11,17 @@
 
 ## Executive Summary
 
-StayLoop is a next-generation vacation rental platform that disrupts the traditional marketplace model by introducing a revolutionary multi-level referral earning system. Unlike Airbnb or Vrbo, StayLoop empowers hosts to build passive income streams not just from their own properties, but from an entire network of hosts they bring to the platform.
+StayLoop is a next-generation vacation rental marketplace for U.S. travelers booking entire homes, hotel rooms, cabins, and unique stays. The public website should emphasize guest search, verified inventory, transparent pricing, secure payments, and mobile trip management, while the host referral program lives in a separate partner experience.
 
 ### Vision Statement
-To create the world's first decentralized vacation rental marketplace where hosts become partners in growth, earning recurring revenue from their network while providing guests with exceptional stays.
+To create a trusted short-term rental marketplace where guests can book exceptional stays with confidence and qualified hosts can grow through better economics, modern tools, and an optional partner program.
 
 ### Key Differentiators
-- **10% platform fee** vs. 15-20% on competitors
-- **Multi-level referral earnings** (3 levels deep: 3%, 2%, 1%)
+- **Consumer-first booking experience** with modern search, verified stays, and clear pricing
+- **10% host service fee** plus **5% guest service fee** shown transparently
+- **Separate host partner program** with 3-level referral earnings (3%, 2%, 1%)
 - **PMS integrations** for seamless property management
-- **No caps** on referral earnings or network size
-- **Instant book** capabilities with verified hosts
+- **Instant book and request-to-book** capabilities with verified hosts
 
 ---
 
