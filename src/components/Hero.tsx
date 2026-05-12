@@ -1,4 +1,4 @@
-import { CalendarDays, MapPin, Search, ShieldCheck, SlidersHorizontal, Sparkles, Star, Users } from 'lucide-react';
+import { CalendarDays, ReceiptText, Search, ShieldCheck, SlidersHorizontal, Sparkles, Star, Users } from 'lucide-react';
 import { useState } from 'react';
 import { stayCategories } from '../data/showcase';
 
@@ -137,9 +137,9 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
               copy: 'Support instant book and request-to-book stays so travelers can choose how they reserve.',
             },
             {
-              icon: MapPin,
-              title: 'Top U.S. getaways',
-              copy: 'Browse beach towns, mountain escapes, music weekends, desert retreats, and family favorites.',
+              icon: ReceiptText,
+              title: 'No surprise totals',
+              copy: 'See nightly rates, cleaning fees, and guest fees before you decide where to stay.',
             },
           ].map((feature) => {
             const Icon = feature.icon;
