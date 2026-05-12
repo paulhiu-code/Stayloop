@@ -26,7 +26,7 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-semibold text-orange-100 shadow-sm backdrop-blur">
               <Sparkles className="h-4 w-4 text-orange-300" />
-              U.S. stays with verified hosts, flexible booking, and clear fees
+              U.S. stays with verified details, flexible booking, and clear fees
             </div>
 
             <h1 className="mt-8 text-5xl font-extrabold leading-[0.95] tracking-tight sm:text-6xl lg:text-7xl">
@@ -109,7 +109,7 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
                   <div>
                     <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-200">This weekend in Austin</p>
                     <h2 className="mt-2 text-2xl font-extrabold">Work-ready bungalow with backyard firepit</h2>
-                    <p className="mt-2 text-sm text-slate-300">Transparent total before checkout. Host payout scheduled after check-in.</p>
+                    <p className="mt-2 text-sm text-slate-300">Transparent total before checkout. Trip details ready before arrival.</p>
                   </div>
                   <div className="rounded-2xl bg-white px-4 py-3 text-right text-gray-900">
                     <div className="flex items-center gap-1 text-sm font-bold">
@@ -129,7 +129,7 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
             {
               icon: ShieldCheck,
               title: 'Verified stays',
-              copy: 'Host identity, property details, and listing quality checks before a stay goes live.',
+              copy: 'Listing details, photos, amenities, and quality checks help you book with confidence.',
             },
             {
               icon: SlidersHorizontal,
@@ -138,8 +138,8 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
             },
             {
               icon: MapPin,
-              title: 'U.S. launch focus',
-              copy: 'Built first for U.S. travelers, tax workflows, insurance protection, and local compliance needs.',
+              title: 'Top U.S. getaways',
+              copy: 'Browse beach towns, mountain escapes, music weekends, desert retreats, and family favorites.',
             },
           ].map((feature) => {
             const Icon = feature.icon;
