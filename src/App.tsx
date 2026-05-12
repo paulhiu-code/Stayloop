@@ -227,13 +227,13 @@ function AppContent() {
               </div>
             </div>
 
-            <div className="mx-auto w-full max-w-sm rounded-[3rem] border-8 border-gray-900 bg-gray-950 p-3 shadow-2xl">
+            <div className="mx-auto w-full max-w-xs rounded-[2.5rem] border-8 border-gray-900 bg-gray-950 p-3 shadow-2xl">
               <div className="rounded-[2.35rem] bg-white p-4">
                 <div className="mb-4 h-6 rounded-full bg-gray-100"></div>
                 <img
                   src="https://images.pexels.com/photos/6585757/pexels-photo-6585757.jpeg?auto=compress&cs=tinysrgb&w=900"
                   alt="StayLoop mobile app property preview"
-                  className="h-72 w-full rounded-[2rem] object-cover"
+                  className="h-56 w-full rounded-[2rem] object-cover"
                 />
                 <div className="mt-5">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-600">Saved trip</p>
