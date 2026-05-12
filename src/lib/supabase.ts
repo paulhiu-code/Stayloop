@@ -49,7 +49,7 @@ export type Property = {
   min_nights: number;
   max_nights: number;
   is_active: boolean;
-  pms_integration: any;
+  pms_integration: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };

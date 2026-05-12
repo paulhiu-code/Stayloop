@@ -5,7 +5,6 @@ import {
   DollarSign,
   Home,
   Calendar,
-  MessageSquare,
   Settings,
   Copy,
   Check,
@@ -15,11 +14,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
 import PMSSettings from './PMSSettings';
 
+type DashboardTab = 'overview' | 'properties' | 'bookings' | 'referrals' | 'pms';
+
 export default function Dashboard({ onClose }: { onClose: () => void }) {
   const { profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'properties' | 'bookings' | 'referrals' | 'pms'>(
-    'overview'
-  );
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [copied, setCopied] = useState(false);
   const [earnings, setEarnings] = useState<ReferralEarning[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -72,7 +71,7 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const tabs = [
+  const tabs: Array<{ id: DashboardTab; label: string; icon: typeof TrendingUp }> = [
     { id: 'overview', label: 'Overview', icon: TrendingUp },
     { id: 'properties', label: 'Properties', icon: Home },
     { id: 'bookings', label: 'Bookings', icon: Calendar },
@@ -191,7 +190,7 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id as any)}
+                      onClick={() => setActiveTab(tab.id)}
                       className={`flex items-center gap-2 px-4 py-4 border-b-2 font-medium transition ${
                         activeTab === tab.id
                           ? 'border-orange-500 text-orange-600'
