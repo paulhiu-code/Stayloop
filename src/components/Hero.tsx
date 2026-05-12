@@ -26,7 +26,7 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-semibold text-orange-100 shadow-sm backdrop-blur">
               <Sparkles className="h-4 w-4 text-orange-300" />
-              U.S. stays with verified details, flexible booking, and clear fees
+              Stays with verified details, flexible booking, and clear fees
             </div>
 
             <h1 className="mt-8 text-5xl font-extrabold leading-[0.95] tracking-tight sm:text-6xl lg:text-7xl">
