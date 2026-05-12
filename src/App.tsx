@@ -222,8 +222,8 @@ function AppContent() {
                 The mobile app concept mirrors the web marketplace with saved stays, trip chat, check-in instructions, and real-time booking updates.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <span className="rounded-2xl bg-gray-900 px-5 py-3 font-bold text-white">iOS concept</span>
-                <span className="rounded-2xl bg-white px-5 py-3 font-bold text-gray-900 shadow">Android concept</span>
+                <span className="rounded-2xl bg-gray-900 px-5 py-3 font-bold text-white">iOS app</span>
+                <span className="rounded-2xl border border-gray-200 bg-white px-5 py-3 font-bold text-gray-900 shadow">Android app</span>
               </div>
             </div>
 
