@@ -13,11 +13,11 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
   return (
     <section className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-orange-950 overflow-hidden text-white">
       <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.30),transparent_32%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.24),transparent_30%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(15,23,42,0.78))]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.28),transparent_32%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.20),transparent_30%),linear-gradient(135deg,rgba(15,23,42,0.88),rgba(15,23,42,0.66))]"></div>
         <img
-          src="https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg?auto=compress&cs=tinysrgb&w=1800"
+          src="https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=1800"
           alt=""
-          className="h-full w-full object-cover opacity-25"
+          className="h-full w-full object-cover opacity-40"
         />
       </div>
 
