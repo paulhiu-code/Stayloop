@@ -1,201 +1,192 @@
 import { useState } from 'react';
-import { Home, DollarSign, TrendingUp, Users, Network, Shield, ArrowRight, Check } from 'lucide-react';
-import Header from './Header';
+import {
+  ArrowRight,
+  BadgeCheck,
+  CalendarCheck,
+  DollarSign,
+  Home,
+  Link2,
+  Shield,
+  Smartphone,
+  Users,
+  Workflow,
+} from 'lucide-react';
+import Header, { SitePage } from './Header';
 import AuthModal from './AuthModal';
 
-export default function HostsPage({ onClose }: { onClose: () => void }) {
+type HostsPageProps = {
+  onClose: () => void;
+  onNavigate: (page: SitePage) => void;
+};
+
+const hostFeatures = [
+  {
+    icon: DollarSign,
+    title: 'Keep 90% of booking revenue',
+    copy: 'StayLoop takes a 10% host service fee and shows guests a separate 5% guest fee upfront.',
+  },
+  {
+    icon: CalendarCheck,
+    title: 'Instant book or request-to-book',
+    copy: 'Let proven listings book instantly while premium or high-risk stays can still require approval.',
+  },
+  {
+    icon: Workflow,
+    title: 'PMS and calendar sync',
+    copy: 'Built around OwnerRez, Guesty, iCal, and multi-property operator workflows from day one.',
+  },
+  {
+    icon: Shield,
+    title: 'Protection similar to Airbnb',
+    copy: 'Guest screening, damage protection, secure payments, and support workflows are core to the model.',
+  },
+];
+
+export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
   const [showAuth, setShowAuth] = useState(false);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header onShowAuth={() => setShowAuth(true)} onShowDashboard={onClose} />
+      <Header
+        onShowAuth={() => setShowAuth(true)}
+        onShowDashboard={onClose}
+        onNavigate={onNavigate}
+        showPartnerProgram
+      />
 
-      <div className="relative bg-gradient-to-br from-slate-50 via-white to-orange-50 overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute top-20 left-10 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-          <div className="absolute top-40 right-10 w-96 h-96 bg-rose-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
-          <div className="absolute bottom-20 left-1/2 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
-        </div>
+      <section className="relative overflow-hidden bg-gradient-to-br from-white via-orange-50 to-rose-50">
+        <div className="absolute right-0 top-0 h-96 w-96 rounded-full bg-orange-200 blur-3xl opacity-60"></div>
+        <div className="absolute bottom-0 left-0 h-96 w-96 rounded-full bg-rose-200 blur-3xl opacity-50"></div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-28 lg:py-40">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-100 to-teal-100 backdrop-blur-sm px-5 py-2.5 rounded-full text-sm font-bold text-emerald-700 mb-8 shadow-md border border-emerald-200/50 hover:shadow-lg transition-all duration-300">
-              <TrendingUp className="w-4 h-4" />
-              Revolutionary Revenue Model
+        <div className="relative mx-auto grid max-w-7xl gap-12 px-4 py-24 sm:px-6 lg:grid-cols-[1fr_0.9fr] lg:items-center lg:px-8 lg:py-32">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/80 px-5 py-2.5 text-sm font-bold text-orange-700 shadow-sm">
+              <Home className="h-4 w-4" />
+              Host marketplace
             </div>
-
-            <h1 className="text-6xl lg:text-8xl font-extrabold text-gray-900 mb-8 leading-tight tracking-tight">
-              Host. Refer.
-              <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 animate-gradient">
-                Earn Forever
-              </span>
+            <h1 className="mt-8 text-5xl font-extrabold leading-tight tracking-tight text-gray-900 lg:text-7xl">
+              List your place where guests want to book next.
             </h1>
-
-            <p className="text-xl lg:text-2xl text-gray-600 mb-12 max-w-4xl mx-auto leading-relaxed font-light">
-              List your property and build a passive income stream that grows with every referral.
-              <span className="block mt-2 text-gray-500">Earn from your bookings AND from the success of hosts you bring to the platform.</span>
+            <p className="mt-6 max-w-2xl text-xl leading-9 text-gray-600">
+              StayLoop gives hosts a professional listing flow, lower platform economics, verified guests, and property management integrations without making the guest site about referrals.
             </p>
+            <div className="mt-10 flex flex-wrap gap-4">
+              <button
+                onClick={() => setShowAuth(true)}
+                className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-8 py-4 text-lg font-bold text-white shadow-xl transition hover:scale-105"
+              >
+                Start listing
+                <ArrowRight className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => onNavigate('partners')}
+                className="inline-flex items-center gap-3 rounded-2xl bg-white px-8 py-4 text-lg font-bold text-gray-900 shadow-xl transition hover:-translate-y-0.5"
+              >
+                See partner program
+                <Link2 className="h-5 w-5 text-orange-600" />
+              </button>
+            </div>
+          </div>
 
+          <div className="rounded-[2.5rem] bg-white p-5 shadow-2xl">
+            <img
+              src="https://images.pexels.com/photos/5998136/pexels-photo-5998136.jpeg?auto=compress&cs=tinysrgb&w=1400"
+              alt="Host preparing a modern short-term rental"
+              className="h-96 w-full rounded-[2rem] object-cover"
+            />
+            <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+              {[
+                ['10%', 'host fee'],
+                ['24h', 'after check-in'],
+                ['PMS', 'sync ready'],
+              ].map(([value, label]) => (
+                <div key={label} className="rounded-2xl bg-gray-50 p-4">
+                  <div className="text-2xl font-extrabold text-gray-900">{value}</div>
+                  <div className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-gray-500">{label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <main className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+        <div className="mb-12 max-w-3xl">
+          <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">Host tools</p>
+          <h2 className="mt-4 text-4xl font-extrabold text-gray-900">Everything hosts need before the network effects.</h2>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {hostFeatures.map((feature) => {
+            const Icon = feature.icon;
+
+            return (
+              <div key={feature.title} className="rounded-[2rem] border border-gray-200 bg-white p-8 shadow-lg transition hover:-translate-y-1 hover:shadow-2xl">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-100">
+                  <Icon className="h-7 w-7 text-orange-600" />
+                </div>
+                <h3 className="mt-6 text-2xl font-extrabold text-gray-900">{feature.title}</h3>
+                <p className="mt-3 leading-7 text-gray-600">{feature.copy}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        <section className="mt-20 grid gap-8 rounded-[2.5rem] bg-gray-900 p-8 text-white shadow-2xl lg:grid-cols-[0.9fr_1.1fr] lg:p-12">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-300">Operator ready</p>
+            <h2 className="mt-4 text-4xl font-extrabold">Built for single homes, hotels, and portfolio managers.</h2>
+            <p className="mt-5 leading-8 text-gray-300">
+              Hosts can list an entire home, boutique hotel room, cabin, or unique stay, then connect PMS data as they scale.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[
+              ['OwnerRez and Guesty', 'Import listings, rates, reservations, and availability.'],
+              ['Verified property flow', 'ID, ownership or management rights, photos, amenities, and house rules.'],
+              ['Guest messaging', 'Pre-arrival chat, instructions, and support escalation.'],
+              ['Mobile dashboard', 'Bookings, payouts, sync status, and referral tracking in one place.'],
+            ].map(([title, copy]) => (
+              <div key={title} className="rounded-3xl border border-white/10 bg-white/10 p-6">
+                <BadgeCheck className="h-6 w-6 text-orange-300" />
+                <h3 className="mt-4 text-xl font-bold">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-gray-300">{copy}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-20 rounded-[2.5rem] border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-8 shadow-xl lg:p-12">
+          <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold text-orange-700 shadow">
+                <Users className="h-4 w-4" />
+                Optional host growth program
+              </div>
+              <h2 className="mt-5 text-4xl font-extrabold text-gray-900">Revenue share lives on a separate partner page.</h2>
+              <p className="mt-4 max-w-3xl leading-8 text-gray-600">
+                Guests see a clean travel marketplace. Qualified hosts can still learn about the 3-2-1 partner structure in a dedicated program experience.
+              </p>
+            </div>
             <button
-              onClick={() => setShowAuth(true)}
-              className="inline-flex items-center gap-3 px-10 py-5 bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 text-white font-bold rounded-2xl hover:shadow-2xl transition-all duration-300 shadow-xl transform hover:scale-105 text-lg"
+              onClick={() => onNavigate('partners')}
+              className="inline-flex items-center justify-center gap-3 rounded-2xl bg-gray-900 px-8 py-4 text-lg font-bold text-white shadow-xl"
             >
-              Start Hosting Today
-              <ArrowRight className="w-6 h-6" />
+              Open partner page
+              <ArrowRight className="h-5 w-5" />
             </button>
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="text-center mb-20">
-          <h2 className="text-5xl font-extrabold text-gray-900 mb-6">How StayLoop Works for Hosts</h2>
-          <p className="text-2xl text-gray-600 font-light">Two ways to earn: from your properties and from your network</p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-24">
-          <div className="bg-white rounded-3xl p-12 shadow-2xl border-2 border-gray-200 hover:border-orange-300 transition-all duration-300 transform hover:-translate-y-1">
-            <div className="w-20 h-20 bg-gradient-to-br from-orange-500 via-rose-500 to-orange-600 rounded-3xl flex items-center justify-center mb-8 shadow-xl">
-              <Home className="w-8 h-8 text-white" />
-            </div>
-            <h3 className="text-3xl font-extrabold text-gray-900 mb-5">Earn from Your Properties</h3>
-            <p className="text-gray-600 mb-8 leading-relaxed text-lg">
-              List your properties and start earning immediately. Keep 90% of your booking revenue after our 10% service fee.
-            </p>
-            <ul className="space-y-3">
-              <li className="flex items-start gap-3">
-                <Check className="w-6 h-6 text-green-500 flex-shrink-0 mt-0.5" />
-                <span className="text-gray-700">Competitive 10% commission (vs 15-20% elsewhere)</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-6 h-6 text-green-500 flex-shrink-0 mt-0.5" />
-                <span className="text-gray-700">Fast payouts 24 hours after check-in</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-6 h-6 text-green-500 flex-shrink-0 mt-0.5" />
-                <span className="text-gray-700">Seamless PMS integration with tools you already use</span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="bg-gradient-to-br from-orange-500 via-rose-500 to-orange-600 rounded-3xl p-12 shadow-2xl text-white transform hover:-translate-y-1 transition-all duration-300">
-            <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-3xl flex items-center justify-center mb-8 shadow-xl">
-              <Network className="w-8 h-8 text-white" />
-            </div>
-            <h3 className="text-3xl font-extrabold mb-5">Build Your Network</h3>
-            <p className="text-white/90 mb-6 leading-relaxed">
-              Refer other hosts and earn passive income from EVERY booking they make. 3 levels deep.
-            </p>
-            <ul className="space-y-3">
-              <li className="flex items-start gap-3">
-                <Check className="w-6 h-6 text-white flex-shrink-0 mt-0.5" />
-                <span className="text-white/95">3% commission on Level 1 (direct referrals)</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-6 h-6 text-white flex-shrink-0 mt-0.5" />
-                <span className="text-white/95">2% commission on Level 2 (their referrals)</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Check className="w-6 h-6 text-white flex-shrink-0 mt-0.5" />
-                <span className="text-white/95">1% commission on Level 3 (third level down)</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-3xl p-16 text-white mb-24 overflow-hidden shadow-2xl">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMiI+PHBhdGggZD0iTTM2IDE4YzAtNi42MjcgNS4zNzMtMTIgMTItMTJzMTIgNS4zNzMgMTIgMTItNS4zNzMgMTItMTIgMTItMTItNS4zNzMtMTItMTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-50"></div>
-          <div className="relative max-w-5xl mx-auto">
-            <h2 className="text-5xl font-extrabold mb-12 text-center">Real Income Example</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-              <div className="text-center bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10">
-                <div className="text-6xl font-extrabold text-orange-400 mb-3">$45,000</div>
-                <div className="text-xl text-gray-300 mb-4 font-semibold">Your Property Earnings</div>
-                <div className="text-base text-gray-400">5 properties × $9,000/year avg</div>
-              </div>
-              <div className="text-center bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10">
-                <div className="text-6xl font-extrabold text-rose-400 mb-3">$18,000</div>
-                <div className="text-xl text-gray-300 mb-4 font-semibold">Level 1 Referrals (3%)</div>
-                <div className="text-base text-gray-400">10 hosts × $60,000 bookings/year</div>
-              </div>
-              <div className="text-center bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10">
-                <div className="text-6xl font-extrabold text-amber-400 mb-3">$24,000</div>
-                <div className="text-xl text-gray-300 mb-4 font-semibold">Levels 2 & 3 Combined</div>
-                <div className="text-base text-gray-400">Network effect from 30+ hosts</div>
-              </div>
-            </div>
-            <div className="mt-16 pt-12 border-t border-gray-700/50 text-center">
-              <div className="text-7xl lg:text-8xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-rose-400 to-amber-400 mb-4 animate-gradient">
-                $87,000/year
-              </div>
-              <div className="text-2xl text-gray-300 font-semibold">Total Annual Income Potential</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-24">
-          <div className="bg-white rounded-3xl p-10 border-2 border-gray-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-            <div className="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl flex items-center justify-center mb-6 shadow-md">
-              <DollarSign className="w-7 h-7 text-orange-600" />
-            </div>
-            <h3 className="text-2xl font-extrabold text-gray-900 mb-4">Lower Fees</h3>
-            <p className="text-gray-600 text-lg leading-relaxed">
-              Only 10% commission vs 15-20% on other platforms. Keep more of what you earn.
-            </p>
-          </div>
-
-          <div className="bg-white rounded-3xl p-10 border-2 border-gray-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-            <div className="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl flex items-center justify-center mb-6 shadow-md">
-              <Users className="w-7 h-7 text-orange-600" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">No Caps</h3>
-            <p className="text-gray-600">
-              Unlimited earning potential. No caps on referral income or network size.
-            </p>
-          </div>
-
-          <div className="bg-white rounded-3xl p-10 border-2 border-gray-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-            <div className="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl flex items-center justify-center mb-6 shadow-md">
-              <Shield className="w-7 h-7 text-orange-600" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Full Support</h3>
-            <p className="text-gray-600">
-              24/7 host support, verified guests, and secure payment processing included.
-            </p>
-          </div>
-        </div>
-
-        <div className="relative bg-gradient-to-r from-orange-50 via-rose-50 to-orange-50 rounded-3xl p-16 text-center border-2 border-orange-200 shadow-2xl overflow-hidden">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmOTdhOGQiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDE4YzAtNi42MjcgNS4zNzMtMTIgMTItMTJzMTIgNS4zNzMgMTIgMTItNS4zNzMgMTItMTIgMTItMTItNS4zNzMtMTItMTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-40"></div>
-          <div className="relative">
-            <h2 className="text-5xl font-extrabold text-gray-900 mb-6">Ready to Start Earning?</h2>
-            <p className="text-2xl text-gray-600 mb-10 max-w-3xl mx-auto font-light">
-              Join StayLoop today and build a revenue stream that grows with your network
-            </p>
-            <button
-              onClick={() => setShowAuth(true)}
-              className="inline-flex items-center gap-3 px-10 py-5 bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 text-white font-bold rounded-2xl hover:shadow-2xl transition-all duration-300 shadow-xl transform hover:scale-105 text-lg"
-            >
-              Get Started Free
-              <ArrowRight className="w-6 h-6" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <footer className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white mt-32 overflow-hidden">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMiI+PHBhdGggZD0iTTM2IDE4YzAtNi42MjcgNS4zNzMtMTIgMTItMTJzMTIgNS4zNzMgMTIgMTItNS4zNzMgMTItMTIgMTItMTItNS4zNzMtMTItMTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-50"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-          <div className="text-center">
-            <button
-              onClick={onClose}
-              className="inline-flex items-center gap-2 text-orange-400 hover:text-orange-300 font-bold transition-colors duration-200 mb-10 text-lg"
-            >
-              ← Back to Main Site
-            </button>
-            <p className="text-gray-400 text-base">© 2025 StayLoop. All rights reserved.</p>
-          </div>
+      <footer className="bg-gray-900 py-12 text-center text-white">
+        <button onClick={onClose} className="mb-5 font-bold text-orange-300 hover:text-orange-200">
+          Back to main site
+        </button>
+        <p className="text-gray-400">© 2026 StayLoop. All rights reserved.</p>
+        <div className="mt-4 inline-flex items-center gap-2 text-sm text-gray-500">
+          <Smartphone className="h-4 w-4" />
+          Web and mobile app experience
         </div>
       </footer>
 

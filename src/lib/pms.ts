@@ -11,8 +11,8 @@ export interface PMSConnection {
   oauth_access_token: string | null;
   oauth_refresh_token: string | null;
   oauth_expires_at: string | null;
-  api_credentials: Record<string, any> | null;
-  sync_settings: Record<string, any>;
+  api_credentials: Record<string, unknown> | null;
+  sync_settings: Record<string, unknown>;
   last_sync_at: string | null;
   sync_status: 'pending' | 'syncing' | 'completed' | 'failed';
   sync_error: string | null;
@@ -25,7 +25,7 @@ export interface PMSPropertyMapping {
   pms_connection_id: string;
   stayloop_property_id: string;
   pms_property_id: string;
-  pms_property_data: Record<string, any> | null;
+  pms_property_data: Record<string, unknown> | null;
   sync_direction: 'to_pms' | 'from_pms' | 'bidirectional';
   auto_sync_enabled: boolean;
   last_synced_at: string | null;
@@ -42,7 +42,7 @@ export interface PMSSyncLog {
   records_processed: number;
   records_succeeded: number;
   records_failed: number;
-  error_details: Record<string, any> | null;
+  error_details: Record<string, unknown> | null;
   started_at: string;
   completed_at: string | null;
   created_at: string;
@@ -103,7 +103,7 @@ export async function getPMSConnections(): Promise<PMSConnection[]> {
   return data || [];
 }
 
-export async function syncPMSProperties(connectionId: string): Promise<any> {
+export async function syncPMSProperties(connectionId: string): Promise<unknown> {
   const { data: connection } = await supabase
     .from('pms_connections')
     .select('pms_provider')
@@ -138,7 +138,7 @@ export async function syncPMSProperties(connectionId: string): Promise<any> {
   return response.json();
 }
 
-export async function syncPMSBookings(connectionId: string, propertyId?: string): Promise<any> {
+export async function syncPMSBookings(connectionId: string, propertyId?: string): Promise<unknown> {
   const { data: connection } = await supabase
     .from('pms_connections')
     .select('pms_provider')
@@ -174,7 +174,7 @@ export async function syncPMSBookings(connectionId: string, propertyId?: string)
   return response.json();
 }
 
-export async function syncPMSAvailability(connectionId: string, propertyId: string): Promise<any> {
+export async function syncPMSAvailability(connectionId: string, propertyId: string): Promise<unknown> {
   const { data: connection } = await supabase
     .from('pms_connections')
     .select('pms_provider')

@@ -1,38 +1,58 @@
-import { Home, Menu, X, User, LogOut, LayoutDashboard } from 'lucide-react';
+import { LayoutDashboard, LogOut, Menu, Plane, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+
+export type SitePage = 'home' | 'hosts' | 'partners';
 
 export default function Header({
   onShowAuth,
   onShowDashboard,
+  onNavigate,
+  showPartnerProgram = false,
 }: {
   onShowAuth: () => void;
   onShowDashboard: () => void;
+  onNavigate?: (page: SitePage) => void;
+  showPartnerProgram?: boolean;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, profile, signOut } = useAuth();
 
+  function goTo(page: SitePage) {
+    onNavigate?.(page);
+    setMobileMenuOpen(false);
+  }
+
+  const navItems = [
+    { label: 'Explore', page: 'home' as const },
+    { label: 'List your place', page: 'hosts' as const },
+    ...(showPartnerProgram ? [{ label: 'Partner program', page: 'partners' as const }] : []),
+  ];
+
   return (
-    <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50 shadow-lg">
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-lg shadow-gray-900/5">
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
-          <a href="/" className="flex items-center gap-3 cursor-pointer group">
+          <button onClick={() => goTo('home')} className="flex items-center gap-3 cursor-pointer group text-left">
             <div className="w-14 h-14 bg-gradient-to-br from-orange-500 via-rose-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 transform group-hover:scale-105">
-              <Home className="w-8 h-8 text-white" />
+              <Plane className="w-8 h-8 text-white" />
             </div>
             <div>
               <div className="text-2xl font-extrabold text-gray-900 tracking-tight">StayLoop</div>
-              <div className="text-xs text-gray-500 font-medium">Book Your Next Stay</div>
+              <div className="text-xs text-gray-500 font-medium">Find stays that fit your trip</div>
             </div>
-          </a>
+          </button>
 
           <div className="hidden md:flex items-center gap-8">
-            <a href="#" className="text-gray-700 hover:text-orange-600 font-semibold transition-colors duration-200 relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-orange-600 after:transition-all after:duration-300">
-              Explore
-            </a>
-            <a href="/hosts" className="text-gray-700 hover:text-orange-600 font-semibold transition-colors duration-200 relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-orange-600 after:transition-all after:duration-300">
-              Become a Host
-            </a>
+            {navItems.map((item) => (
+              <button
+                key={item.label}
+                onClick={() => goTo(item.page)}
+                className="text-gray-700 hover:text-orange-600 font-semibold transition-colors duration-200 relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-orange-600 after:transition-all after:duration-300"
+              >
+                {item.label}
+              </button>
+            ))}
 
             {user ? (
               <div className="flex items-center gap-4">
@@ -83,12 +103,15 @@ export default function Header({
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-gray-100">
             <div className="flex flex-col gap-4">
-              <a href="#" className="text-gray-700 hover:text-orange-600 font-medium transition">
-                Explore
-              </a>
-              <a href="/hosts" className="text-gray-700 hover:text-orange-600 font-medium transition">
-                Become a Host
-              </a>
+              {navItems.map((item) => (
+                <button
+                  key={item.label}
+                  onClick={() => goTo(item.page)}
+                  className="text-left text-gray-700 hover:text-orange-600 font-medium transition"
+                >
+                  {item.label}
+                </button>
+              ))}
               {user ? (
                 <>
                   <button

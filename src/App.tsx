@@ -1,27 +1,41 @@
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Header from './components/Header';
+import Header, { SitePage } from './components/Header';
 import Hero from './components/Hero';
 import PropertyCard from './components/PropertyCard';
 import AuthModal from './components/AuthModal';
 import Dashboard from './components/Dashboard';
 import HostsPage from './components/HostsPage';
+import PartnersPage from './components/PartnersPage';
 import { supabase, Property } from './lib/supabase';
+import { showcaseProperties } from './data/showcase';
+
+function pageFromPath(path: string): SitePage {
+  if (path === '/hosts') return 'hosts';
+  if (path === '/partners') return 'partners';
+  return 'home';
+}
+
+function pathFromPage(page: SitePage) {
+  if (page === 'hosts') return '/hosts';
+  if (page === 'partners') return '/partners';
+  return '/';
+}
 
 function AppContent() {
   const [showAuth, setShowAuth] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [showHostsPage, setShowHostsPage] = useState(false);
+  const [page, setPage] = useState<SitePage>(() => pageFromPath(window.location.pathname));
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const { loading: authLoading } = useAuth();
 
   useEffect(() => {
-    const path = window.location.pathname;
-    if (path === '/hosts') {
-      setShowHostsPage(true);
-    }
+    const handlePopState = () => setPage(pageFromPath(window.location.pathname));
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   useEffect(() => {
@@ -60,6 +74,12 @@ function AppContent() {
     fetchProperties(query);
   }
 
+  function navigate(nextPage: SitePage) {
+    window.history.pushState({}, '', pathFromPage(nextPage));
+    setPage(nextPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
@@ -71,8 +91,12 @@ function AppContent() {
     );
   }
 
-  if (showHostsPage) {
-    return <HostsPage onClose={() => setShowHostsPage(false)} />;
+  if (page === 'hosts') {
+    return <HostsPage onClose={() => navigate('home')} onNavigate={navigate} />;
+  }
+
+  if (page === 'partners') {
+    return <PartnersPage onClose={() => navigate('home')} onNavigate={navigate} onShowAuth={() => setShowAuth(true)} />;
   }
 
   if (showDashboard) {
@@ -81,20 +105,27 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header onShowAuth={() => setShowAuth(true)} onShowDashboard={() => setShowDashboard(true)} />
+      <Header
+        onShowAuth={() => setShowAuth(true)}
+        onShowDashboard={() => setShowDashboard(true)}
+        onNavigate={navigate}
+      />
 
       <Hero onSearch={handleSearch} />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">
-              {searchQuery ? 'Search Results' : 'Featured Properties'}
+            <p className="mb-3 text-sm font-bold uppercase tracking-[0.24em] text-orange-600">
+              {searchQuery ? 'Search results' : 'Featured stays'}
+            </p>
+            <h2 className="text-4xl font-extrabold text-gray-900 mb-2">
+              {searchQuery ? `Places matching "${searchQuery}"` : 'Curated places guests can book next'}
             </h2>
             <p className="text-gray-600">
               {searchQuery
                 ? `Found ${properties.length} properties`
-                : 'Discover amazing places to stay'}
+                : 'Entire homes, hotel rooms, cabins, and unique stays with a professional booking flow.'}
             </p>
           </div>
         </div>
@@ -115,9 +146,14 @@ function AppContent() {
               <PropertyCard key={property.id} property={property} />
             ))}
           </div>
+        ) : !searchQuery ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {showcaseProperties.map((property) => (
+              <PropertyCard key={property.id} property={property} />
+            ))}
+          </div>
         ) : (
           <div className="text-center py-20">
-            <div className="text-6xl mb-4">🏠</div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">No properties found</h3>
             <p className="text-gray-600 mb-8">
               {searchQuery
@@ -134,7 +170,81 @@ function AppContent() {
             )}
           </div>
         )}
-      </div>
+      </main>
+
+      <section className="bg-white py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">Why guests choose StayLoop</p>
+              <h2 className="mt-4 text-4xl font-extrabold tracking-tight text-gray-900">
+                A modern booking marketplace with less guesswork.
+              </h2>
+              <p className="mt-5 text-lg leading-8 text-gray-600">
+                StayLoop keeps the public site focused on the guest journey: find a place, understand the total, book with confidence, and message the host when needed.
+              </p>
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="mt-8 rounded-2xl bg-gray-900 px-7 py-4 font-bold text-white shadow-xl transition hover:bg-gray-800"
+              >
+                Start searching
+              </button>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {[
+                ['5% guest fee', 'Clear guest service fee shown before checkout.'],
+                ['Protected payouts', 'Guest pays upfront; host payout is released after check-in.'],
+                ['Verified supply', 'Identity, property, and quality checks reduce booking risk.'],
+                ['PMS ready', 'OwnerRez, Guesty, and calendar sync support multi-property operators.'],
+              ].map(([title, copy]) => (
+                <div key={title} className="rounded-[2rem] border border-gray-200 bg-gray-50 p-7 shadow-sm">
+                  <h3 className="text-2xl font-extrabold text-gray-900">{title}</h3>
+                  <p className="mt-3 leading-7 text-gray-600">{copy}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-rose-50 to-white py-20">
+        <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-orange-200 blur-3xl opacity-50"></div>
+        <div className="absolute -right-20 bottom-0 h-72 w-72 rounded-full bg-rose-200 blur-3xl opacity-50"></div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid gap-12 lg:grid-cols-[1fr_0.9fr] lg:items-center">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">Web plus mobile app</p>
+              <h2 className="mt-4 text-4xl font-extrabold text-gray-900">
+                Built for travelers who plan on desktop and book on the go.
+              </h2>
+              <p className="mt-5 text-lg leading-8 text-gray-600">
+                The mobile app concept mirrors the web marketplace with saved stays, trip chat, check-in instructions, and real-time booking updates.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <span className="rounded-2xl bg-gray-900 px-5 py-3 font-bold text-white">iOS app</span>
+                <span className="rounded-2xl border border-gray-200 bg-white px-5 py-3 font-bold text-gray-900 shadow">Android app</span>
+              </div>
+            </div>
+
+            <div className="mx-auto w-full max-w-xs rounded-[2.5rem] border-8 border-gray-900 bg-gray-950 p-3 shadow-2xl">
+              <div className="rounded-[2.35rem] bg-white p-4">
+                <div className="mb-4 h-6 rounded-full bg-gray-100"></div>
+                <img
+                  src="https://images.pexels.com/photos/6585757/pexels-photo-6585757.jpeg?auto=compress&cs=tinysrgb&w=900"
+                  alt="StayLoop mobile app property preview"
+                  className="h-56 w-full rounded-[2rem] object-cover"
+                />
+                <div className="mt-5">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-600">Saved trip</p>
+                  <h3 className="mt-2 text-2xl font-extrabold text-gray-900">Sedona design stay</h3>
+                  <p className="mt-2 text-sm text-gray-500">Check-in Friday. Host confirmed. Total shown upfront.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <footer className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white mt-32 overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMiI+PHBhdGggZD0iTTM2IDE4YzAtNi42MjcgNS4zNzMtMTIgMTItMTJzMTIgNS4zNzMgMTIgMTItNS4zNzMgMTItMTIgMTItMTItNS4zNzMtMTItMTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-50"></div>
@@ -170,19 +280,14 @@ function AppContent() {
               <h3 className="font-bold text-xl mb-5 text-white">Company</h3>
               <ul className="space-y-3">
                 <li>
-                  <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
-                    About Us
-                  </a>
+                  <button onClick={() => navigate('home')} className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
+                    About StayLoop
+                  </button>
                 </li>
                 <li>
-                  <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
-                    Careers
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
-                    Press
-                  </a>
+                  <button onClick={() => navigate('hosts')} className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
+                    List your place
+                  </button>
                 </li>
                 <li>
                   <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
