@@ -290,11 +290,6 @@ function AppContent() {
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => navigate('partners')} className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
-                    Partner program
-                  </button>
-                </li>
-                <li>
                   <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
                     Blog
                   </a>

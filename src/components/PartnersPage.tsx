@@ -59,7 +59,7 @@ export default function PartnersPage({ onClose, onNavigate, onShowAuth }: Partne
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <Header onShowAuth={openAuth} onShowDashboard={onClose} onNavigate={onNavigate} />
+      <Header onShowAuth={openAuth} onShowDashboard={onClose} onNavigate={onNavigate} showPartnerProgram />
 
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.25),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(244,63,94,0.22),transparent_28%)]"></div>

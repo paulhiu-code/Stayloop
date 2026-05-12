@@ -8,10 +8,12 @@ export default function Header({
   onShowAuth,
   onShowDashboard,
   onNavigate,
+  showPartnerProgram = false,
 }: {
   onShowAuth: () => void;
   onShowDashboard: () => void;
   onNavigate?: (page: SitePage) => void;
+  showPartnerProgram?: boolean;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, profile, signOut } = useAuth();
@@ -24,7 +26,7 @@ export default function Header({
   const navItems = [
     { label: 'Explore', page: 'home' as const },
     { label: 'List your place', page: 'hosts' as const },
-    { label: 'Partner program', page: 'partners' as const },
+    ...(showPartnerProgram ? [{ label: 'Partner program', page: 'partners' as const }] : []),
   ];
 
   return (

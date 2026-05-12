@@ -47,7 +47,12 @@ export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header onShowAuth={() => setShowAuth(true)} onShowDashboard={onClose} onNavigate={onNavigate} />
+      <Header
+        onShowAuth={() => setShowAuth(true)}
+        onShowDashboard={onClose}
+        onNavigate={onNavigate}
+        showPartnerProgram
+      />
 
       <section className="relative overflow-hidden bg-gradient-to-br from-white via-orange-50 to-rose-50">
         <div className="absolute right-0 top-0 h-96 w-96 rounded-full bg-orange-200 blur-3xl opacity-60"></div>
