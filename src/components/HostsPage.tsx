@@ -51,6 +51,7 @@ export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
         onShowAuth={() => setShowAuth(true)}
         onShowDashboard={onClose}
         onNavigate={onNavigate}
+        showHostLinks
         showPartnerProgram
       />
 
