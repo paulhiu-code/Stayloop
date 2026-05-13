@@ -107,7 +107,7 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
               <div className="absolute bottom-8 left-8 right-8 rounded-[2rem] border border-white/20 bg-slate-950/90 p-6 shadow-2xl backdrop-blur">
                 <div className="flex items-start justify-between gap-5">
                   <div>
-                    <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-200">For every kind of trip</p>
+                    <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-200">This weekend, your way</p>
                     <h2 className="mt-2 text-2xl font-extrabold">Beach houses, cabins, city stays, and more</h2>
                     <p className="mt-2 text-sm text-slate-300">Compare guest favorites with clear totals before checkout.</p>
                   </div>
