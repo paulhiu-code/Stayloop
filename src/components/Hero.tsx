@@ -100,8 +100,8 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
             <div className="absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-orange-400/30 to-rose-500/20 blur-3xl"></div>
             <div className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-white/10 p-4 shadow-2xl backdrop-blur">
               <img
-                src="https://images.pexels.com/photos/7340487/pexels-photo-7340487.jpeg?auto=compress&cs=tinysrgb&w=1400"
-                alt="Warm modern living room with couch and plants"
+                src="https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1400&q=80"
+                alt="Warm modern living room with comfortable sofa"
                 className="h-[34rem] w-full rounded-[2rem] object-cover"
               />
               <div className="absolute bottom-8 left-8 right-8 rounded-[2rem] border border-white/20 bg-slate-950/90 p-6 shadow-2xl backdrop-blur">
