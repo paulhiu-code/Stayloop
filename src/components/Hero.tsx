@@ -14,11 +14,11 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
     <section className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-orange-950 overflow-hidden text-white">
       <div className="absolute inset-0">
         <img
-          src="https://images.unsplash.com/photo-1557335200-a65f7f032602?auto=format&fit=crop&w=1800&q=80"
+          src="https://images.pexels.com/photos/6523283/pexels-photo-6523283.jpeg?auto=compress&cs=tinysrgb&w=1800"
           alt=""
-          className="h-full w-full object-cover opacity-90"
+          className="h-full w-full object-cover opacity-82"
         />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.22),transparent_34%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.16),transparent_30%),linear-gradient(90deg,rgba(15,23,42,0.92)_0%,rgba(15,23,42,0.78)_45%,rgba(15,23,42,0.38)_100%)]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.22),transparent_34%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.16),transparent_30%),linear-gradient(90deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.86)_48%,rgba(15,23,42,0.48)_100%)]"></div>
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
@@ -104,12 +104,12 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
                 alt="Modern living room in a vacation rental"
                 className="h-[34rem] w-full rounded-[2rem] object-cover"
               />
-              <div className="absolute bottom-8 left-8 right-8 rounded-[2rem] border border-white/20 bg-slate-950/80 p-6 shadow-2xl backdrop-blur">
+              <div className="absolute bottom-8 left-8 right-8 rounded-[2rem] border border-white/20 bg-slate-950/90 p-6 shadow-2xl backdrop-blur">
                 <div className="flex items-start justify-between gap-5">
                   <div>
-                    <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-200">This weekend in Austin</p>
-                    <h2 className="mt-2 text-2xl font-extrabold">Work-ready bungalow with backyard firepit</h2>
-                    <p className="mt-2 text-sm text-slate-300">Clear total before checkout. Trip details ready before arrival.</p>
+                    <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-200">For every kind of trip</p>
+                    <h2 className="mt-2 text-2xl font-extrabold">Beach houses, cabins, city stays, and more</h2>
+                    <p className="mt-2 text-sm text-slate-300">Compare guest favorites with clear totals before checkout.</p>
                   </div>
                   <div className="rounded-2xl bg-white px-4 py-3 text-right text-gray-900">
                     <div className="flex items-center gap-1 text-sm font-bold">
