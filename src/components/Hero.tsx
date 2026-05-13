@@ -100,15 +100,15 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
             <div className="absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-orange-400/30 to-rose-500/20 blur-3xl"></div>
             <div className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-white/10 p-4 shadow-2xl backdrop-blur">
               <img
-                src="https://images.pexels.com/photos/273204/pexels-photo-273204.jpeg?auto=compress&cs=tinysrgb&w=1400"
-                alt="Austin skyline under a bright blue sky"
-                className="h-[34rem] w-full rounded-[2rem] object-cover object-center"
+                src="https://images.pexels.com/photos/7534561/pexels-photo-7534561.jpeg?auto=compress&cs=tinysrgb&w=1400"
+                alt="Modern living room in a vacation rental"
+                className="h-[34rem] w-full rounded-[2rem] object-cover"
               />
               <div className="absolute bottom-8 left-8 right-8 rounded-[2rem] border border-white/20 bg-slate-950/80 p-6 shadow-2xl backdrop-blur">
                 <div className="flex items-start justify-between gap-5">
                   <div>
                     <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-200">This weekend in Austin</p>
-                    <h2 className="mt-2 text-2xl font-extrabold">Sunny city stay near trails and music</h2>
+                    <h2 className="mt-2 text-2xl font-extrabold">Work-ready bungalow with backyard firepit</h2>
                     <p className="mt-2 text-sm text-slate-300">Clear total before checkout. Trip details ready before arrival.</p>
                   </div>
                   <div className="rounded-2xl bg-white px-4 py-3 text-right text-gray-900">
