@@ -14,7 +14,7 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
     <section className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-orange-950 overflow-hidden text-white">
       <div className="absolute inset-0">
         <img
-          src="https://images.pexels.com/photos/6523283/pexels-photo-6523283.jpeg?auto=compress&cs=tinysrgb&w=1800"
+          src="https://images.pexels.com/photos/457882/pexels-photo-457882.jpeg?auto=compress&cs=tinysrgb&w=1800"
           alt=""
           className="h-full w-full object-cover opacity-82"
         />
@@ -100,8 +100,8 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
             <div className="absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-orange-400/30 to-rose-500/20 blur-3xl"></div>
             <div className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-white/10 p-4 shadow-2xl backdrop-blur">
               <img
-                src="https://images.pexels.com/photos/7534561/pexels-photo-7534561.jpeg?auto=compress&cs=tinysrgb&w=1400"
-                alt="Modern living room in a vacation rental"
+                src="https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=1400"
+                alt="Cozy upscale living room in a vacation rental"
                 className="h-[34rem] w-full rounded-[2rem] object-cover"
               />
               <div className="absolute bottom-8 left-8 right-8 rounded-[2rem] border border-white/20 bg-slate-950/90 p-6 shadow-2xl backdrop-blur">
