@@ -16,9 +16,9 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
         <img
           src="https://images.pexels.com/photos/457882/pexels-photo-457882.jpeg?auto=compress&cs=tinysrgb&w=1800"
           alt=""
-          className="h-full w-full object-cover opacity-82"
+          className="h-full w-full object-cover opacity-95"
         />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.22),transparent_34%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.16),transparent_30%),linear-gradient(90deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.86)_48%,rgba(15,23,42,0.48)_100%)]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.22),transparent_34%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.12),transparent_30%),linear-gradient(90deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.84)_48%,rgba(15,23,42,0.30)_100%)]"></div>
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
@@ -48,8 +48,8 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="City, beach, mountain, hotel"
-                        className="mt-1 w-full bg-transparent text-base font-semibold text-gray-900 outline-none placeholder:text-gray-400"
+                        placeholder="Where to?"
+                        className="mt-1 w-full bg-transparent text-base font-semibold text-gray-950 outline-none placeholder:text-gray-600"
                       />
                     </span>
                   </label>
@@ -100,8 +100,8 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
             <div className="absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-orange-400/30 to-rose-500/20 blur-3xl"></div>
             <div className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-white/10 p-4 shadow-2xl backdrop-blur">
               <img
-                src="https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1400&q=80"
-                alt="Warm modern living room with comfortable sofa"
+                src="https://images.unsplash.com/photo-1762529716272-b316f61502e7?auto=format&fit=crop&w=1400&q=80"
+                alt="Modern coastal living room with neutral sofa and plants"
                 className="h-[34rem] w-full rounded-[2rem] object-cover"
               />
               <div className="absolute bottom-8 left-8 right-8 rounded-[2rem] border border-white/20 bg-slate-950/90 p-6 shadow-2xl backdrop-blur">
