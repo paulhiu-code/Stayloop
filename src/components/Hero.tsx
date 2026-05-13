@@ -100,8 +100,8 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
             <div className="absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-orange-400/30 to-rose-500/20 blur-3xl"></div>
             <div className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-white/10 p-4 shadow-2xl backdrop-blur">
               <img
-                src="https://images.pexels.com/photos/6523283/pexels-photo-6523283.jpeg?auto=compress&cs=tinysrgb&w=1400"
-                alt="Modern upscale lounge in a vacation rental"
+                src="https://images.pexels.com/photos/30380646/pexels-photo-30380646.jpeg?auto=compress&cs=tinysrgb&w=1400"
+                alt="Cozy upscale living room with beige sofa and natural light"
                 className="h-[34rem] w-full rounded-[2rem] object-cover"
               />
               <div className="absolute bottom-8 left-8 right-8 rounded-[2rem] border border-white/20 bg-slate-950/90 p-6 shadow-2xl backdrop-blur">
@@ -129,17 +129,17 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
             {
               icon: ShieldCheck,
               title: 'Verified stays',
-              copy: 'Reviewed details, photos, and amenities help you book with confidence.',
+              copy: 'Reviewed details and photos.',
             },
             {
               icon: SlidersHorizontal,
               title: 'Flexible booking',
-              copy: 'Choose instant book or request-to-book when you reserve.',
+              copy: 'Instant book or request.',
             },
             {
               icon: ReceiptText,
               title: 'No surprise totals',
-              copy: 'See rates, cleaning fees, and guest fees before checkout.',
+              copy: 'Fees shown before checkout.',
             },
           ].map((feature) => {
             const Icon = feature.icon;
