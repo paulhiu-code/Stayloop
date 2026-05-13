@@ -14,11 +14,11 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
     <section className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-orange-950 overflow-hidden text-white">
       <div className="absolute inset-0">
         <img
-          src="https://images.pexels.com/photos/457882/pexels-photo-457882.jpeg?auto=compress&cs=tinysrgb&w=1800"
+          src="https://images.pexels.com/photos/31509800/pexels-photo-31509800.jpeg?auto=compress&cs=tinysrgb&w=1800"
           alt=""
-          className="h-full w-full object-cover opacity-95"
+          className="h-full w-full object-cover object-center opacity-95"
         />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.22),transparent_34%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.12),transparent_30%),linear-gradient(90deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.84)_48%,rgba(15,23,42,0.30)_100%)]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.18),transparent_34%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.08),transparent_30%),linear-gradient(90deg,rgba(15,23,42,0.94)_0%,rgba(15,23,42,0.74)_44%,rgba(15,23,42,0.14)_100%)]"></div>
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
@@ -145,7 +145,7 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
             const Icon = feature.icon;
 
             return (
-              <div key={feature.title} className="rounded-[2rem] border border-white/10 bg-white/10 p-6 shadow-xl backdrop-blur">
+              <div key={feature.title} className="rounded-[2rem] border border-white/15 bg-slate-950/65 p-6 shadow-xl backdrop-blur">
                 <Icon className="h-8 w-8 text-orange-300" />
                 <h3 className="mt-5 text-xl font-bold">{feature.title}</h3>
                 <p className="mt-3 text-sm leading-6 text-slate-300">{feature.copy}</p>
