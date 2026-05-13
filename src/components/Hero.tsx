@@ -14,11 +14,11 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
     <section className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-orange-950 overflow-hidden text-white">
       <div className="absolute inset-0">
         <img
-          src="https://images.pexels.com/photos/1571468/pexels-photo-1571468.jpeg?auto=compress&cs=tinysrgb&w=1800"
+          src="https://images.pexels.com/photos/6523283/pexels-photo-6523283.jpeg?auto=compress&cs=tinysrgb&w=1800"
           alt=""
-          className="h-full w-full object-cover opacity-40"
+          className="h-full w-full object-cover opacity-90"
         />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.28),transparent_32%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.20),transparent_30%),linear-gradient(135deg,rgba(15,23,42,0.88),rgba(15,23,42,0.66))]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.22),transparent_34%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.16),transparent_30%),linear-gradient(90deg,rgba(15,23,42,0.92)_0%,rgba(15,23,42,0.78)_45%,rgba(15,23,42,0.38)_100%)]"></div>
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
