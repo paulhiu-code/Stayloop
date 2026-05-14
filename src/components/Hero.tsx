@@ -38,44 +38,77 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
             </p>
 
             <form onSubmit={handleSubmit} className="mt-10 max-w-5xl">
-              <div className="rounded-[2rem] border border-white/15 bg-white p-2 shadow-2xl shadow-orange-950/30">
-                <div className="grid gap-2 lg:grid-cols-[1.3fr_1fr_0.85fr_auto]">
-                  <label className="flex items-center gap-3 rounded-3xl px-5 py-4 text-left text-gray-900 hover:bg-orange-50">
-                    <Search className="h-5 w-5 text-orange-600" />
+              <div className="rounded-[2rem] border border-white/40 bg-white/95 p-2 shadow-2xl shadow-slate-950/25 backdrop-blur-xl">
+                <div className="grid items-stretch overflow-hidden rounded-[1.5rem] md:grid-cols-[1.35fr_auto_0.9fr_auto_0.8fr_auto_auto]">
+                  <label className="group flex cursor-text items-center gap-3 px-5 py-3 text-left text-slate-950 transition hover:bg-slate-50">
+                    <Search className="h-3.5 w-3.5 text-orange-600" />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-bold uppercase tracking-[0.2em] text-gray-500">Where</span>
+                      <span className="block text-[0.68rem] font-extrabold uppercase tracking-[0.22em] text-slate-500">
+                        Where
+                      </span>
                       <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Where to?"
-                        className="mt-1 w-full bg-transparent text-base font-semibold text-gray-950 outline-none placeholder:text-gray-600"
+                        className="mt-1 w-full bg-transparent text-[0.95rem] font-semibold text-slate-950 outline-none placeholder:text-slate-500"
                       />
                     </span>
                   </label>
 
-                  <div className="flex items-center gap-3 rounded-3xl px-5 py-4 text-gray-900 hover:bg-orange-50">
-                    <CalendarDays className="h-5 w-5 text-orange-600" />
-                    <span>
-                      <span className="block text-xs font-bold uppercase tracking-[0.2em] text-gray-500">Dates</span>
-                      <span className="mt-1 block text-base font-semibold">Add dates</span>
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3 rounded-3xl px-5 py-4 text-gray-900 hover:bg-orange-50">
-                    <Users className="h-5 w-5 text-orange-600" />
-                    <span>
-                      <span className="block text-xs font-bold uppercase tracking-[0.2em] text-gray-500">Guests</span>
-                      <span className="mt-1 block text-base font-semibold">Add guests</span>
-                    </span>
-                  </div>
+                  <div
+                    className="hidden h-11 self-center md:block"
+                    style={{ width: '1px', backgroundColor: '#cbd5e1' }}
+                    aria-hidden="true"
+                  ></div>
 
                   <button
-                    type="submit"
-                    className="rounded-3xl bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-8 py-4 text-lg font-bold text-white shadow-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl"
+                    type="button"
+                    className="flex items-center gap-3 border-t border-slate-200 px-5 py-3 text-left text-slate-950 transition hover:bg-slate-50 md:border-t-0"
                   >
-                    Search
+                    <CalendarDays className="h-3.5 w-3.5 text-orange-600" />
+                    <span>
+                      <span className="block text-[0.68rem] font-extrabold uppercase tracking-[0.22em] text-slate-500">
+                        Dates
+                      </span>
+                      <span className="mt-1 block text-[0.95rem] font-semibold">Add dates</span>
+                    </span>
                   </button>
+
+                  <div
+                    className="hidden h-11 self-center md:block"
+                    style={{ width: '1px', backgroundColor: '#cbd5e1' }}
+                    aria-hidden="true"
+                  ></div>
+
+                  <button
+                    type="button"
+                    className="flex items-center gap-3 border-t border-slate-200 px-5 py-3 text-left text-slate-950 transition hover:bg-slate-50 md:border-t-0"
+                  >
+                    <Users className="h-3.5 w-3.5 text-orange-600" />
+                    <span>
+                      <span className="block text-[0.68rem] font-extrabold uppercase tracking-[0.22em] text-slate-500">
+                        Guests
+                      </span>
+                      <span className="mt-1 block text-[0.95rem] font-semibold">Add guests</span>
+                    </span>
+                  </button>
+
+                  <div
+                    className="hidden h-11 self-center md:block"
+                    style={{ width: '1px', backgroundColor: '#cbd5e1' }}
+                    aria-hidden="true"
+                  ></div>
+
+                  <div className="border-t border-slate-200 p-2 md:border-t-0">
+                    <button
+                      type="submit"
+                      className="flex h-full min-h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-6 text-base font-extrabold text-white shadow-lg shadow-orange-500/25 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl md:w-auto"
+                    >
+                      <Search className="h-4 w-4" />
+                      Search
+                    </button>
+                  </div>
                 </div>
               </div>
             </form>
