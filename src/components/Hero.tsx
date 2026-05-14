@@ -14,11 +14,11 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
     <section className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-orange-950 overflow-hidden text-white">
       <div className="absolute inset-0">
         <img
-          src="https://images.pexels.com/photos/240526/pexels-photo-240526.jpeg?auto=compress&cs=tinysrgb&w=1800"
+          src="https://images.pexels.com/photos/457881/pexels-photo-457881.jpeg?auto=compress&cs=tinysrgb&w=1800"
           alt=""
           className="h-full w-full object-cover object-center opacity-95"
         />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_34%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.06),transparent_30%),linear-gradient(90deg,rgba(15,23,42,0.88)_0%,rgba(15,23,42,0.64)_44%,rgba(15,23,42,0.08)_100%)]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_34%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.05),transparent_30%),linear-gradient(90deg,rgba(15,23,42,0.80)_0%,rgba(15,23,42,0.54)_44%,rgba(15,23,42,0.04)_100%)]"></div>
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
@@ -29,11 +29,11 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
               Stays with verified details, flexible booking, and clear fees
             </div>
 
-            <h1 className="mt-8 text-5xl font-extrabold leading-[0.95] tracking-tight sm:text-6xl lg:text-7xl">
+            <h1 className="mt-8 text-5xl font-extrabold leading-[0.95] tracking-tight drop-shadow-[0_3px_18px_rgba(15,23,42,0.65)] sm:text-6xl lg:text-7xl">
               Book the stay that makes the trip.
             </h1>
 
-            <p className="mt-8 max-w-2xl text-lg leading-8 text-slate-200 sm:text-xl">
+            <p className="mt-8 max-w-2xl text-lg leading-8 text-slate-100 drop-shadow-[0_2px_12px_rgba(15,23,42,0.75)] sm:text-xl">
               StayLoop helps travelers compare homes, hotel rooms, cabins, and unique stays with upfront pricing and real booking support.
             </p>
 
