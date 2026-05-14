@@ -7,6 +7,7 @@ import AuthModal, { AuthMode } from './components/AuthModal';
 import Dashboard from './components/Dashboard';
 import HostsPage from './components/HostsPage';
 import PartnersPage from './components/PartnersPage';
+import StayLoopLogo from './components/StayLoopLogo';
 import { supabase, Property } from './lib/supabase';
 import { showcaseProperties } from './data/showcase';
 
@@ -332,11 +333,8 @@ function AppContent() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
             <div className="col-span-1 md:col-span-2">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 via-rose-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-xl">
-                  <span className="text-white font-bold text-2xl">S</span>
-                </div>
-                <span className="text-3xl font-extrabold">StayLoop</span>
+              <div className="mb-6 inline-flex rounded-2xl bg-white px-5 py-4 shadow-2xl shadow-black/20">
+                <StayLoopLogo className="w-44" />
               </div>
               <p className="text-gray-400 mb-8 leading-relaxed text-lg">
                 Book unique vacation rentals, homes, and experiences around the world.

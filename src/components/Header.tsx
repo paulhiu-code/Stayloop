@@ -1,7 +1,8 @@
-import { LayoutDashboard, LogOut, Menu, Plane, User, X } from 'lucide-react';
+import { LayoutDashboard, LogOut, Menu, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import type { AuthMode } from './AuthModal';
+import StayLoopLogo from './StayLoopLogo';
 
 export type SitePage = 'home' | 'hosts' | 'partners';
 
@@ -36,14 +37,8 @@ export default function Header({
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 shadow-sm shadow-slate-900/5 backdrop-blur-xl">
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          <button onClick={() => goTo('home')} className="flex cursor-pointer items-center gap-3 text-left group">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 via-rose-500 to-orange-600 shadow-md shadow-orange-500/20 transition-all duration-300 group-hover:scale-105 group-hover:shadow-lg group-hover:shadow-orange-500/25">
-              <Plane className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <div className="text-[1.35rem] font-extrabold tracking-tight text-slate-950">StayLoop</div>
-              <div className="text-[0.66rem] font-semibold text-slate-500">Find stays that fit your trip</div>
-            </div>
+          <button onClick={() => goTo('home')} className="group flex cursor-pointer items-center text-left">
+            <StayLoopLogo className="w-36 transition-transform duration-300 group-hover:scale-[1.02]" showTagline />
           </button>
 
           <div className="hidden items-center gap-6 md:flex">
