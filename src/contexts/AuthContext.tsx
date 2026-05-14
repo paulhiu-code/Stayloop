@@ -2,13 +2,16 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase, Profile } from '../lib/supabase';
 
+export type UserType = Profile['user_type'];
+
 type AuthContextType = {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string, referralCode?: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, userType: UserType, referralCode?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  updateUserType: (userType: UserType) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -60,14 +63,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function signUp(email: string, password: string, fullName: string, referralCode?: string) {
+  async function signUp(email: string, password: string, fullName: string, userType: UserType, referralCode?: string) {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: fullName,
+          user_type: userType,
+          referral_code: referralCode?.toUpperCase() || null,
+        },
+      },
     });
 
     if (authError) throw authError;
     if (!authData.user) throw new Error('User creation failed');
+
+    // If email confirmation is enabled, Supabase returns a user without a session.
+    // In that case, the database trigger stores metadata on profile creation.
+    if (!authData.session) return;
 
     let referrerId = null;
     if (referralCode) {
@@ -87,10 +101,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .update({
         full_name: fullName,
         referred_by: referrerId,
+        user_type: userType,
       })
       .eq('id', authData.user.id);
 
     if (profileError) throw profileError;
+    await fetchProfile(authData.user.id);
   }
 
   async function signIn(email: string, password: string) {
@@ -106,8 +122,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   }
 
+  async function updateUserType(userType: UserType) {
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ user_type: userType })
+      .eq('id', user.id);
+
+    if (error) throw error;
+    await fetchProfile(user.id);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut, updateUserType }}>
       {children}
     </AuthContext.Provider>
   );
