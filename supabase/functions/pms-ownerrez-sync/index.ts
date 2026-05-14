@@ -42,19 +42,43 @@ Deno.serve(async (req: Request) => {
 
     const { action, pmsConnectionId, propertyId, webhookData }: SyncRequest = await req.json();
 
+    let authedUserId: string | null = null;
+    if (action !== 'webhook') {
+      const authHeader = req.headers.get('Authorization') || '';
+      const token = authHeader.replace('Bearer ', '');
+      const { data: userData, error: userError } = await supabase.auth.getUser(token);
+
+      if (userError || !userData.user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Not authenticated' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      authedUserId = userData.user.id;
+    }
+
     // Get PMS connection details
-    const { data: connection, error: connError } = await supabase
+    let connectionQuery = supabase
       .from('pms_connections')
       .select('*')
       .eq('id', pmsConnectionId)
-      .eq('pms_provider', 'ownerrez')
-      .single();
+      .eq('pms_provider', 'ownerrez');
+
+    if (authedUserId) {
+      connectionQuery = connectionQuery.eq('user_id', authedUserId);
+    }
+
+    const { data: connection, error: connError } = await connectionQuery.single();
 
     if (connError || !connection) {
       throw new Error('PMS connection not found');
     }
 
-    const ownerRezToken = connection.oauth_access_token;
+    const ownerRezToken = connection.oauth_access_token || connection.api_credentials?.access_token;
+    if (!ownerRezToken) {
+      throw new Error('OwnerRez access token is missing');
+    }
     const baseUrl = 'https://api.ownerreservations.com/v2';
 
     // Create sync log
@@ -144,7 +168,7 @@ async function syncProperties(supabase: any, connection: any, baseUrl: string, t
       // Check if mapping exists
       const { data: mapping } = await supabase
         .from('pms_property_mappings')
-        .select('stayloop_property_id')
+        .select('id, stayloop_property_id')
         .eq('pms_connection_id', connection.id)
         .eq('pms_property_id', prop.id)
         .maybeSingle();
@@ -162,6 +186,7 @@ async function syncProperties(supabase: any, connection: any, baseUrl: string, t
         bathrooms: prop.bathrooms || 1,
         max_guests: prop.maxGuests || 2,
         base_price: prop.baseRate || 0,
+        cleaning_fee: 0,
         amenities: prop.amenities || [],
         images: prop.photos || [],
         pms_integration: {
@@ -242,7 +267,7 @@ async function syncBookings(supabase: any, connection: any, baseUrl: string, tok
       // Get property mapping
       const { data: mapping } = await supabase
         .from('pms_property_mappings')
-        .select('stayloop_property_id')
+        .select('id, stayloop_property_id')
         .eq('pms_connection_id', connection.id)
         .eq('pms_property_id', booking.propertyId)
         .maybeSingle();
@@ -269,6 +294,11 @@ async function syncBookings(supabase: any, connection: any, baseUrl: string, tok
         .maybeSingle();
 
       if (!existingBooking) {
+        const total = Number(booking.total || 0);
+        const cleaningFee = Number(booking.cleaningFee || 0);
+        const guestServiceFee = Number((total * 0.05).toFixed(2));
+        const hostServiceFee = Number((total * 0.10).toFixed(2));
+
         await supabase.from('bookings').insert({
           property_id: mapping.stayloop_property_id,
           guest_id: connection.user_id,
@@ -277,9 +307,12 @@ async function syncBookings(supabase: any, connection: any, baseUrl: string, tok
           check_out: booking.departure,
           num_guests: booking.guests || 1,
           total_nights: booking.nights || 1,
-          base_amount: booking.total || 0,
-          total_amount: booking.total || 0,
-          host_payout: (booking.total || 0) * 0.9,
+          base_amount: total,
+          cleaning_fee: cleaningFee,
+          guest_service_fee: guestServiceFee,
+          host_service_fee: hostServiceFee,
+          total_amount: total + guestServiceFee,
+          host_payout: total - hostServiceFee,
           status: booking.status === 'confirmed' ? 'confirmed' : 'pending',
           payment_intent_id: booking.id,
         });
@@ -316,7 +349,7 @@ async function syncAvailability(supabase: any, connection: any, baseUrl: string,
   // Get property mapping
   const { data: mapping } = await supabase
     .from('pms_property_mappings')
-    .select('stayloop_property_id')
+    .select('id, stayloop_property_id')
     .eq('pms_connection_id', connection.id)
     .eq('pms_property_id', propertyId)
     .single();
@@ -333,7 +366,7 @@ async function syncAvailability(supabase: any, connection: any, baseUrl: string,
     processed++;
     try {
       await supabase
-        .from('property_availability')
+        .from('availability_calendar')
         .upsert({
           property_id: mapping.stayloop_property_id,
           date: day.date,

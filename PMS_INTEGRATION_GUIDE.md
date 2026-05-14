@@ -61,6 +61,21 @@ Stores incoming webhook events:
 
 ### OwnerRez Setup
 
+#### StayLoop database setup
+
+Before connecting OwnerRez in the app, run this migration in Supabase SQL Editor:
+
+```text
+supabase/migrations/20260514000000_pms_integrations.sql
+```
+
+This creates:
+
+- `pms_connections`
+- `pms_property_mappings`
+- `pms_sync_logs`
+- `pms_webhook_events`
+
 1. **Get API Credentials**
    - Go to https://www.ownerrez.com
    - Navigate to Settings → Developer/API
@@ -80,8 +95,18 @@ Stores incoming webhook events:
    - Go to Dashboard → PMS Integrations
    - Click "Add Connection"
    - Select OwnerRez
-   - Complete OAuth flow
-   - Start syncing!
+   - Paste your OwnerRez API/OAuth access token
+   - Click "Save connection"
+   - Run "Sync Properties"
+
+5. **Deploy Supabase Edge Functions**
+   - `pms-ownerrez-sync`
+   - `pms-webhook-receiver`
+
+6. **Test the first sync**
+   - Confirm your OwnerRez properties appear in StayLoop
+   - Confirm each OwnerRez property has a row in `pms_property_mappings`
+   - Confirm sync status and logs appear in `pms_sync_logs`
 
 ### Guesty Setup
 
