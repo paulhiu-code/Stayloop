@@ -116,26 +116,15 @@ export async function syncPMSProperties(connectionId: string): Promise<unknown> 
     ? 'pms-ownerrez-sync'
     : 'pms-guesty-sync';
 
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        action: 'sync_properties',
-        pmsConnectionId: connectionId,
-      }),
-    }
-  );
+  const { data, error } = await supabase.functions.invoke(functionName, {
+    body: {
+      action: 'sync_properties',
+      pmsConnectionId: connectionId,
+    },
+  });
 
-  if (!response.ok) {
-    throw new Error('Sync failed');
-  }
-
-  return response.json();
+  if (error) throw error;
+  return data;
 }
 
 export async function syncPMSBookings(connectionId: string, propertyId?: string): Promise<unknown> {
@@ -151,27 +140,16 @@ export async function syncPMSBookings(connectionId: string, propertyId?: string)
     ? 'pms-ownerrez-sync'
     : 'pms-guesty-sync';
 
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        action: 'sync_bookings',
-        pmsConnectionId: connectionId,
-        propertyId,
-      }),
-    }
-  );
+  const { data, error } = await supabase.functions.invoke(functionName, {
+    body: {
+      action: 'sync_bookings',
+      pmsConnectionId: connectionId,
+      propertyId,
+    },
+  });
 
-  if (!response.ok) {
-    throw new Error('Sync failed');
-  }
-
-  return response.json();
+  if (error) throw error;
+  return data;
 }
 
 export async function syncPMSAvailability(connectionId: string, propertyId: string): Promise<unknown> {
@@ -187,27 +165,16 @@ export async function syncPMSAvailability(connectionId: string, propertyId: stri
     ? 'pms-ownerrez-sync'
     : 'pms-guesty-sync';
 
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        action: 'sync_availability',
-        pmsConnectionId: connectionId,
-        propertyId,
-      }),
-    }
-  );
+  const { data, error } = await supabase.functions.invoke(functionName, {
+    body: {
+      action: 'sync_availability',
+      pmsConnectionId: connectionId,
+      propertyId,
+    },
+  });
 
-  if (!response.ok) {
-    throw new Error('Sync failed');
-  }
-
-  return response.json();
+  if (error) throw error;
+  return data;
 }
 
 export async function getPropertyMappings(connectionId: string): Promise<PMSPropertyMapping[]> {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { RefreshCw, Plus, Settings, ExternalLink, CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react';
 import {
   pmsProviders,
+  createPMSConnection,
   getPMSConnections,
   syncPMSProperties,
   syncPMSBookings,
@@ -10,6 +11,7 @@ import {
   togglePMSConnection,
   type PMSConnection,
   type PMSSyncLog,
+  type PMSProvider,
 } from '../lib/pms';
 
 export default function PMSSettings() {
@@ -18,6 +20,11 @@ export default function PMSSettings() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [showAddConnection, setShowAddConnection] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<PMSProvider | null>(null);
+  const [accountName, setAccountName] = useState('');
+  const [accessToken, setAccessToken] = useState('');
+  const [refreshToken, setRefreshToken] = useState('');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     loadConnections();
@@ -78,6 +85,36 @@ export default function PMSSettings() {
     }
   };
 
+  const resetConnectionForm = () => {
+    setSelectedProvider(null);
+    setAccountName('');
+    setAccessToken('');
+    setRefreshToken('');
+  };
+
+  const handleCreateConnection = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedProvider || !accessToken.trim()) return;
+
+    setCreating(true);
+    try {
+      await createPMSConnection(
+        selectedProvider,
+        accessToken.trim(),
+        refreshToken.trim() || undefined,
+        accountName.trim() || undefined
+      );
+      resetConnectionForm();
+      setShowAddConnection(false);
+      await loadConnections();
+    } catch (error) {
+      console.error('Connection failed:', error);
+      alert(error instanceof Error ? error.message : 'Connection failed. Please check your credentials.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -108,7 +145,10 @@ export default function PMSSettings() {
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-900">Connect Your PMS</h3>
               <button
-                onClick={() => setShowAddConnection(false)}
+                onClick={() => {
+                  setShowAddConnection(false);
+                  resetConnectionForm();
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 ×
@@ -146,9 +186,7 @@ export default function PMSSettings() {
                       View Setup Guide
                     </a>
                     <button
-                      onClick={() => {
-                        alert(`To connect ${provider.name}:\n\n1. Get your API credentials from ${provider.name}\n2. For OAuth: You'll need client ID and secret\n3. Contact us for help with setup\n\nEmail: support@stayloop.com`);
-                      }}
+                      onClick={() => setSelectedProvider(provider.id)}
                       className="w-full px-4 py-2 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-bold rounded-xl hover:shadow-lg transition"
                     >
                       Connect {provider.name}
@@ -157,6 +195,71 @@ export default function PMSSettings() {
                 </div>
               ))}
             </div>
+
+            {selectedProvider && (
+              <form onSubmit={handleCreateConnection} className="mt-8 rounded-2xl border-2 border-orange-200 bg-orange-50/60 p-6">
+                <div className="mb-5">
+                  <h4 className="text-xl font-bold text-gray-900">
+                    Connect {pmsProviders.find(provider => provider.id === selectedProvider)?.name}
+                  </h4>
+                  <p className="mt-2 text-sm leading-6 text-gray-600">
+                    Paste your PMS API/OAuth access token to create a connection. For OwnerRez, request API access in OwnerRez and use the token provided for your account.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold text-gray-700">Account name</span>
+                    <input
+                      value={accountName}
+                      onChange={(event) => setAccountName(event.target.value)}
+                      placeholder="Example: Paul OwnerRez Portfolio"
+                      className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold text-gray-700">Access token</span>
+                    <input
+                      value={accessToken}
+                      onChange={(event) => setAccessToken(event.target.value)}
+                      placeholder="Paste API/OAuth token"
+                      type="password"
+                      required
+                      className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    />
+                  </label>
+
+                  <label className="block md:col-span-2">
+                    <span className="mb-2 block text-sm font-semibold text-gray-700">Refresh token (optional)</span>
+                    <input
+                      value={refreshToken}
+                      onChange={(event) => setRefreshToken(event.target.value)}
+                      placeholder="Paste refresh token if OwnerRez provides one"
+                      type="password"
+                      className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={resetConnectionForm}
+                    className="rounded-xl border border-gray-300 px-5 py-3 font-semibold text-gray-700 transition hover:bg-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={creating || !accessToken.trim()}
+                    className="rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 px-5 py-3 font-bold text-white shadow-md transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {creating ? 'Connecting...' : 'Save connection'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
