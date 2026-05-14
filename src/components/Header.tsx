@@ -33,25 +33,25 @@ export default function Header({
   ];
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-lg shadow-gray-900/5">
+    <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 shadow-sm shadow-slate-900/5 backdrop-blur-xl">
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
-          <button onClick={() => goTo('home')} className="flex items-center gap-3 cursor-pointer group text-left">
-            <div className="w-14 h-14 bg-gradient-to-br from-orange-500 via-rose-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 transform group-hover:scale-105">
-              <Plane className="w-8 h-8 text-white" />
+        <div className="flex h-16 items-center justify-between">
+          <button onClick={() => goTo('home')} className="flex cursor-pointer items-center gap-3 text-left group">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 via-rose-500 to-orange-600 shadow-md shadow-orange-500/20 transition-all duration-300 group-hover:scale-105 group-hover:shadow-lg group-hover:shadow-orange-500/25">
+              <Plane className="h-6 w-6 text-white" />
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-gray-900 tracking-tight">StayLoop</div>
-              <div className="text-xs text-gray-500 font-medium">Find stays that fit your trip</div>
+              <div className="text-[1.35rem] font-extrabold tracking-tight text-slate-950">StayLoop</div>
+              <div className="text-[0.66rem] font-semibold text-slate-500">Find stays that fit your trip</div>
             </div>
           </button>
 
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden items-center gap-6 md:flex">
             {navItems.map((item) => (
               <button
                 key={item.label}
                 onClick={() => goTo(item.page)}
-                className="text-gray-700 hover:text-orange-600 font-semibold transition-colors duration-200 relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-orange-600 after:transition-all after:duration-300"
+                className="relative text-[0.95rem] font-semibold text-slate-700 transition-colors duration-200 hover:text-orange-600 after:absolute after:-bottom-1.5 after:left-0 after:h-px after:w-0 after:bg-orange-600 after:transition-all after:duration-300 hover:after:w-full"
               >
                 {item.label}
               </button>
@@ -86,16 +86,16 @@ export default function Header({
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => onShowAuth('signin')}
-                  className="px-5 py-3 text-gray-700 hover:text-orange-600 font-bold transition-colors duration-200"
+                  className="rounded-full px-4 py-2.5 text-[0.95rem] font-semibold text-slate-700 transition-all duration-200 hover:bg-slate-100 hover:text-slate-950"
                 >
                   Sign In
                 </button>
                 <button
                   onClick={() => onShowAuth('signup')}
-                  className="px-7 py-3.5 bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 text-white font-bold rounded-xl hover:shadow-xl transition-all duration-300 shadow-lg transform hover:scale-105"
+                  className="rounded-full bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-6 py-3 text-[0.95rem] font-extrabold text-white shadow-lg shadow-orange-500/20 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-orange-500/25"
                 >
                   Join StayLoop
                 </button>
@@ -105,20 +105,20 @@ export default function Header({
 
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 text-gray-700"
+            className="rounded-full p-2 text-slate-700 transition hover:bg-slate-100 md:hidden"
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-gray-100">
+          <div className="border-t border-slate-100 py-4 md:hidden">
             <div className="flex flex-col gap-4">
               {navItems.map((item) => (
                 <button
                   key={item.label}
                   onClick={() => goTo(item.page)}
-                  className="text-left text-gray-700 hover:text-orange-600 font-medium transition"
+                  className="text-left font-semibold text-slate-700 transition hover:text-orange-600"
                 >
                   {item.label}
                 </button>
@@ -142,13 +142,13 @@ export default function Header({
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => onShowAuth('signin')}
-                    className="px-6 py-3 border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all"
+                    className="rounded-2xl border border-slate-200 px-6 py-3 font-bold text-slate-700 transition-all hover:bg-slate-50"
                   >
                     Sign In
                   </button>
                   <button
                     onClick={() => onShowAuth('signup')}
-                    className="px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-md"
+                    className="rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-6 py-3 font-bold text-white shadow-md transition-all hover:from-orange-600 hover:to-rose-600"
                   >
                     Join StayLoop
                   </button>
