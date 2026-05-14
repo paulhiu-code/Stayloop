@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Header, { SitePage } from './components/Header';
 import Hero from './components/Hero';
@@ -9,6 +9,54 @@ import HostsPage from './components/HostsPage';
 import PartnersPage from './components/PartnersPage';
 import { supabase, Property } from './lib/supabase';
 import { showcaseProperties } from './data/showcase';
+
+const featuredMarkets = [
+  {
+    title: 'Lake Tahoe',
+    stays: 'Lake cabins and mountain homes',
+    image: 'https://images.pexels.com/photos/803975/pexels-photo-803975.jpeg?auto=compress&cs=tinysrgb&w=900',
+  },
+  {
+    title: 'Joshua Tree',
+    stays: 'Desert retreats and stargazing stays',
+    image: 'https://images.pexels.com/photos/273935/pexels-photo-273935.jpeg?auto=compress&cs=tinysrgb&w=900',
+  },
+  {
+    title: 'Myrtle Beach',
+    stays: 'Condos near sand, golf, and boardwalks',
+    image: 'https://images.pexels.com/photos/533923/pexels-photo-533923.jpeg?auto=compress&cs=tinysrgb&w=900',
+  },
+  {
+    title: 'Great Smoky Mountains',
+    stays: 'Cabins, hot tubs, and scenic porches',
+    image: 'https://images.pexels.com/photos/167684/pexels-photo-167684.jpeg?auto=compress&cs=tinysrgb&w=900',
+  },
+  {
+    title: 'Hawaii',
+    stays: 'Island villas, lanais, and beach walks',
+    image: 'https://images.pexels.com/photos/457882/pexels-photo-457882.jpeg?auto=compress&cs=tinysrgb&w=900',
+  },
+  {
+    title: 'Nashville',
+    stays: 'Music City homes for weekend trips',
+    image: 'https://images.pexels.com/photos/164693/pexels-photo-164693.jpeg?auto=compress&cs=tinysrgb&w=900',
+  },
+  {
+    title: 'OBX',
+    stays: 'Outer Banks beach houses for groups',
+    image: 'https://images.pexels.com/photos/1438834/pexels-photo-1438834.jpeg?auto=compress&cs=tinysrgb&w=900',
+  },
+  {
+    title: 'Gulf Shores',
+    stays: 'Gulf-front condos and family homes',
+    image: 'https://images.pexels.com/photos/1032650/pexels-photo-1032650.jpeg?auto=compress&cs=tinysrgb&w=900',
+  },
+  {
+    title: 'Destin',
+    stays: 'Emerald Coast stays near clear water',
+    image: 'https://images.pexels.com/photos/753619/pexels-photo-753619.jpeg?auto=compress&cs=tinysrgb&w=900',
+  },
+];
 
 function pageFromPath(path: string): SitePage {
   if (path === '/hosts') return 'hosts';
@@ -29,6 +77,7 @@ function AppContent() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const marketCarouselRef = useRef<HTMLDivElement>(null);
   const { loading: authLoading } = useAuth();
 
   useEffect(() => {
@@ -78,6 +127,16 @@ function AppContent() {
     window.history.pushState({}, '', pathFromPage(nextPage));
     setPage(nextPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function scrollMarkets(direction: 'left' | 'right') {
+    const carousel = marketCarouselRef.current;
+    const scrollDistance = carousel ? carousel.clientWidth - 48 : 960;
+
+    marketCarouselRef.current?.scrollBy({
+      left: direction === 'left' ? -scrollDistance : scrollDistance,
+      behavior: 'smooth',
+    });
   }
 
   if (authLoading) {
@@ -174,36 +233,58 @@ function AppContent() {
 
       <section className="bg-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">Why guests choose StayLoop</p>
-              <h2 className="mt-4 text-4xl font-extrabold tracking-tight text-gray-900">
-                A modern booking marketplace with less guesswork.
+              <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">Featured markets</p>
+              <h2 className="mt-4 max-w-2xl text-4xl font-extrabold tracking-tight text-gray-900">
+                Explore stays in guest-favorite destinations.
               </h2>
-              <p className="mt-5 text-lg leading-8 text-gray-600">
-                StayLoop keeps the public site focused on the guest journey: find a place, understand the total, book with confidence, and message the host when needed.
+              <p className="mt-4 max-w-2xl text-lg leading-8 text-gray-600">
+                From mountain cabins to Gulf Coast beach houses, browse top markets travelers search for again and again.
               </p>
+            </div>
+            <div className="flex gap-3">
               <button
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                className="mt-8 rounded-2xl bg-gray-900 px-7 py-4 font-bold text-white shadow-xl transition hover:bg-gray-800"
+                onClick={() => scrollMarkets('left')}
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-2xl font-bold text-gray-900 shadow-lg transition hover:bg-gray-50"
+                aria-label="Scroll markets left"
               >
-                Start searching
+                ‹
+              </button>
+              <button
+                onClick={() => scrollMarkets('right')}
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-2xl font-bold text-gray-900 shadow-lg transition hover:bg-gray-50"
+                aria-label="Scroll markets right"
+              >
+                ›
               </button>
             </div>
+          </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              {[
-                ['5% guest fee', 'Clear guest service fee shown before checkout.'],
-                ['Protected payouts', 'Guest pays upfront; host payout is released after check-in.'],
-                ['Verified supply', 'Identity, property, and quality checks reduce booking risk.'],
-                ['PMS ready', 'OwnerRez, Guesty, and calendar sync support multi-property operators.'],
-              ].map(([title, copy]) => (
-                <div key={title} className="rounded-[2rem] border border-gray-200 bg-gray-50 p-7 shadow-sm">
-                  <h3 className="text-2xl font-extrabold text-gray-900">{title}</h3>
-                  <p className="mt-3 leading-7 text-gray-600">{copy}</p>
+          <div
+            ref={marketCarouselRef}
+            className="scrollbar-hide -mx-4 flex snap-x gap-5 overflow-x-auto px-4 pb-6"
+          >
+            {featuredMarkets.map((market) => (
+              <button
+                key={market.title}
+                onClick={() => handleSearch(market.title)}
+                className="group min-w-[260px] snap-start overflow-hidden rounded-[2rem] bg-gray-950 text-left shadow-xl transition hover:-translate-y-1 hover:shadow-2xl sm:min-w-[320px]"
+              >
+                <div className="relative h-72 overflow-hidden">
+                  <img
+                    src={market.image}
+                    alt={market.title}
+                    className="h-full w-full object-cover opacity-85 transition duration-700 group-hover:scale-110"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent"></div>
+                  <div className="absolute bottom-0 p-6 text-white">
+                    <h3 className="text-2xl font-extrabold">{market.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-white/85">{market.stays}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
+              </button>
+            ))}
           </div>
         </div>
       </section>
@@ -212,36 +293,30 @@ function AppContent() {
         <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-orange-200 blur-3xl opacity-50"></div>
         <div className="absolute -right-20 bottom-0 h-72 w-72 rounded-full bg-rose-200 blur-3xl opacity-50"></div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid gap-12 lg:grid-cols-[1fr_0.9fr] lg:items-center">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">Web plus mobile app</p>
-              <h2 className="mt-4 text-4xl font-extrabold text-gray-900">
-                Built for travelers who plan on desktop and book on the go.
-              </h2>
-              <p className="mt-5 text-lg leading-8 text-gray-600">
-                The mobile app concept mirrors the web marketplace with saved stays, trip chat, check-in instructions, and real-time booking updates.
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <span className="rounded-2xl bg-gray-900 px-5 py-3 font-bold text-white">iOS app</span>
-                <span className="rounded-2xl border border-gray-200 bg-white px-5 py-3 font-bold text-gray-900 shadow">Android app</span>
-              </div>
-            </div>
+          <div className="mb-10 max-w-3xl">
+            <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">StayLoop Care</p>
+            <h2 className="mt-4 text-4xl font-extrabold text-gray-900">
+              Book with the confidence every great trip deserves.
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-gray-600">
+              StayLoop Care brings the practical reassurance guests look for before choosing a place to stay.
+            </p>
+          </div>
 
-            <div className="mx-auto w-full max-w-xs rounded-[2.5rem] border-8 border-gray-900 bg-gray-950 p-3 shadow-2xl">
-              <div className="rounded-[2.35rem] bg-white p-4">
-                <div className="mb-4 h-6 rounded-full bg-gray-100"></div>
-                <img
-                  src="https://images.pexels.com/photos/6585757/pexels-photo-6585757.jpeg?auto=compress&cs=tinysrgb&w=900"
-                  alt="StayLoop mobile app property preview"
-                  className="h-56 w-full rounded-[2rem] object-cover"
-                />
-                <div className="mt-5">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-600">Saved trip</p>
-                  <h3 className="mt-2 text-2xl font-extrabold text-gray-900">Sedona design stay</h3>
-                  <p className="mt-2 text-sm text-gray-500">Check-in Friday. Host confirmed. Total shown upfront.</p>
+          <div className="grid gap-5 lg:grid-cols-3">
+            {[
+              ['Real trip support', 'Get help before, during, and after your stay when questions or travel changes come up.'],
+              ['Clear total pricing', 'See nightly rates, cleaning fees, and guest fees before you decide to book.'],
+              ['Stay details in one place', 'Keep saved favorites, check-in notes, house rules, and trip updates easy to find.'],
+            ].map(([title, copy]) => (
+              <div key={title} className="rounded-[2rem] border border-orange-100 bg-white/85 p-8 shadow-xl backdrop-blur">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 text-2xl font-extrabold text-white shadow-lg">
+                  ✓
                 </div>
+                <h3 className="text-2xl font-extrabold text-gray-900">{title}</h3>
+                <p className="mt-4 leading-7 text-gray-600">{copy}</p>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
@@ -285,8 +360,8 @@ function AppContent() {
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => navigate('hosts')} className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
-                    List your place
+                  <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
+                    Search stays
                   </button>
                 </li>
                 <li>
