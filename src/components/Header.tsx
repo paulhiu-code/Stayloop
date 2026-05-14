@@ -89,7 +89,7 @@ export default function Header({
                 onClick={onShowAuth}
                 className="px-7 py-3.5 bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 text-white font-bold rounded-xl hover:shadow-xl transition-all duration-300 shadow-lg transform hover:scale-105"
               >
-                Sign In
+                Join StayLoop
               </button>
             )}
           </div>
@@ -134,7 +134,7 @@ export default function Header({
                   onClick={onShowAuth}
                   className="px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-md"
                 >
-                  Sign In
+                  Join StayLoop
                 </button>
               )}
             </div>
