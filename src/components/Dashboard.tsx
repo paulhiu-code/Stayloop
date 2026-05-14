@@ -9,16 +9,19 @@ import {
   Copy,
   Check,
   Network,
+  ArrowRight,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
 import PMSSettings from './PMSSettings';
 
 type DashboardTab = 'overview' | 'properties' | 'bookings' | 'referrals' | 'pms';
+type DashboardMode = 'guest' | 'host';
 
 export default function Dashboard({ onClose }: { onClose: () => void }) {
-  const { profile } = useAuth();
+  const { profile, updateUserType } = useAuth();
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [dashboardMode, setDashboardMode] = useState<DashboardMode>('guest');
   const [copied, setCopied] = useState(false);
   const [earnings, setEarnings] = useState<ReferralEarning[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -34,8 +37,11 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (profile) {
       fetchDashboardData();
+      setDashboardMode(profile.user_type === 'guest' ? 'guest' : 'host');
     }
   }, [profile]);
+
+  const canHost = profile?.user_type === 'host' || profile?.user_type === 'both';
 
   async function fetchDashboardData() {
     if (!profile) return;
@@ -71,6 +77,12 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function becomeHost() {
+    await updateUserType('both');
+    setDashboardMode('host');
+    setActiveTab('properties');
+  }
+
   const tabs: Array<{ id: DashboardTab; label: string; icon: typeof TrendingUp }> = [
     { id: 'overview', label: 'Overview', icon: TrendingUp },
     { id: 'properties', label: 'Properties', icon: Home },
@@ -94,17 +106,97 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
                   <p className="text-xs text-gray-500">Welcome back, {profile?.full_name}</p>
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="px-6 py-2.5 text-gray-700 hover:text-gray-900 font-medium transition"
-              >
-                Back to Home
-              </button>
+              <div className="flex items-center gap-3">
+                {canHost && (
+                  <div className="flex rounded-full border border-gray-200 bg-gray-50 p-1">
+                    <button
+                      onClick={() => setDashboardMode('guest')}
+                      className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+                        dashboardMode === 'guest'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      Guest
+                    </button>
+                    <button
+                      onClick={() => setDashboardMode('host')}
+                      className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+                        dashboardMode === 'host'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      Host
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={onClose}
+                  className="px-6 py-2.5 text-gray-700 hover:text-gray-900 font-medium transition"
+                >
+                  Back to Home
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {dashboardMode === 'guest' ? (
+            <div className="space-y-8">
+              <div className="rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-white shadow-xl">
+                <div className="max-w-3xl">
+                  <p className="mb-3 text-sm font-bold uppercase tracking-[0.22em] text-orange-300">
+                    Guest mode
+                  </p>
+                  <h2 className="text-4xl font-extrabold tracking-tight">
+                    Plan trips, save stays, and come back when you are ready to book.
+                  </h2>
+                  <p className="mt-4 text-lg leading-8 text-slate-300">
+                    Your guest dashboard will hold saved stays, upcoming trips, messages, and booking details as StayLoop grows.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-3">
+                {[
+                  ['Saved stays', 'Shortlist homes, cabins, beach houses, and city stays you want to revisit.'],
+                  ['Upcoming trips', 'Keep reservation details, check-in notes, and support in one place.'],
+                  ['Messages', 'Stay connected with hosts before and during a stay.'],
+                ].map(([title, copy]) => (
+                  <div key={title} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                    <h3 className="text-xl font-extrabold text-gray-900">{title}</h3>
+                    <p className="mt-3 leading-7 text-gray-600">{copy}</p>
+                  </div>
+                ))}
+              </div>
+
+              {!canHost && (
+                <div className="rounded-3xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-8 shadow-sm">
+                  <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
+                    <div>
+                      <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-600">
+                        Have a place to list?
+                      </p>
+                      <h3 className="mt-3 text-3xl font-extrabold text-gray-900">Become a host on StayLoop</h3>
+                      <p className="mt-3 max-w-2xl leading-7 text-gray-600">
+                        Upgrade your account to unlock host tools, PMS integrations, property listings, and booking management while keeping guest access.
+                      </p>
+                    </div>
+                    <button
+                      onClick={becomeHost}
+                      className="inline-flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-7 py-4 font-bold text-white shadow-lg transition hover:shadow-xl"
+                    >
+                      Become a host
+                      <ArrowRight className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
           <div className="mb-8 bg-gradient-to-r from-orange-500 to-rose-500 rounded-2xl p-8 text-white shadow-xl">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -373,6 +465,8 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
               )}
             </div>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>

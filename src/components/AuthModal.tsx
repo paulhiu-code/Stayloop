@@ -1,8 +1,35 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, UserType } from '../contexts/AuthContext';
 
 export type AuthMode = 'signin' | 'signup';
+type JoinIntent = 'guest' | 'host' | 'both';
+
+const joinIntentOptions: Array<{
+  id: JoinIntent;
+  title: string;
+  copy: string;
+}> = [
+  {
+    id: 'guest',
+    title: 'Book stays',
+    copy: 'Find homes, cabins, beach houses, and city stays.',
+  },
+  {
+    id: 'host',
+    title: 'List my property',
+    copy: 'Bring your rentals onto StayLoop and manage host tools.',
+  },
+  {
+    id: 'both',
+    title: 'Both',
+    copy: 'Book trips and manage properties from one account.',
+  },
+];
+
+function userTypeFromIntent(intent: JoinIntent): UserType {
+  return intent === 'guest' ? 'guest' : 'both';
+}
 
 export default function AuthModal({
   onClose,
@@ -15,6 +42,7 @@ export default function AuthModal({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [joinIntent, setJoinIntent] = useState<JoinIntent>('guest');
   const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,7 +56,7 @@ export default function AuthModal({
 
     try {
       if (isSignUp) {
-        await signUp(email, password, fullName, referralCode);
+        await signUp(email, password, fullName, userTypeFromIntent(joinIntent), referralCode);
       } else {
         await signIn(email, password);
       }
@@ -63,18 +91,59 @@ export default function AuthModal({
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {isSignUp && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Full Name
-              </label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition"
-                required
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition"
+                  required
+                />
+              </div>
+
+              <div>
+                <div className="mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    How do you want to use StayLoop?
+                  </label>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Hosts automatically keep guest access too.
+                  </p>
+                </div>
+                <div className="grid gap-3">
+                  {joinIntentOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setJoinIntent(option.id)}
+                      className={`rounded-2xl border p-4 text-left transition ${
+                        joinIntent === option.id
+                          ? 'border-orange-400 bg-orange-50 shadow-sm'
+                          : 'border-gray-200 bg-white hover:border-orange-200 hover:bg-orange-50/40'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-bold text-gray-900">{option.title}</div>
+                          <div className="mt-1 text-sm text-gray-600">{option.copy}</div>
+                        </div>
+                        <div
+                          className={`mt-1 h-4 w-4 rounded-full border ${
+                            joinIntent === option.id
+                              ? 'border-orange-500 bg-orange-500'
+                              : 'border-gray-300'
+                          }`}
+                        />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
 
           <div>
