@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Header, { SitePage } from './components/Header';
 import Hero from './components/Hero';
 import PropertyCard from './components/PropertyCard';
-import AuthModal from './components/AuthModal';
+import AuthModal, { AuthMode } from './components/AuthModal';
 import Dashboard from './components/Dashboard';
 import HostsPage from './components/HostsPage';
 import PartnersPage from './components/PartnersPage';
@@ -72,6 +72,7 @@ function pathFromPage(page: SitePage) {
 
 function AppContent() {
   const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [showDashboard, setShowDashboard] = useState(false);
   const [page, setPage] = useState<SitePage>(() => pageFromPath(window.location.pathname));
   const [properties, setProperties] = useState<Property[]>([]);
@@ -129,6 +130,11 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  function openAuth(mode: AuthMode = 'signin') {
+    setAuthMode(mode);
+    setShowAuth(true);
+  }
+
   function scrollMarkets(direction: 'left' | 'right') {
     const carousel = marketCarouselRef.current;
     const scrollDistance = carousel ? carousel.clientWidth - 48 : 960;
@@ -155,7 +161,7 @@ function AppContent() {
   }
 
   if (page === 'partners') {
-    return <PartnersPage onClose={() => navigate('home')} onNavigate={navigate} onShowAuth={() => setShowAuth(true)} />;
+    return <PartnersPage onClose={() => navigate('home')} onNavigate={navigate} onShowAuth={() => openAuth('signup')} />;
   }
 
   if (showDashboard) {
@@ -165,7 +171,7 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
-        onShowAuth={() => setShowAuth(true)}
+        onShowAuth={openAuth}
         onShowDashboard={() => setShowDashboard(true)}
         onNavigate={navigate}
       />
@@ -418,7 +424,7 @@ function AppContent() {
         </div>
       </footer>
 
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} initialMode={authMode} />}
     </div>
   );
 }

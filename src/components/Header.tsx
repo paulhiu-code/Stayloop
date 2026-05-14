@@ -1,6 +1,7 @@
 import { LayoutDashboard, LogOut, Menu, Plane, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import type { AuthMode } from './AuthModal';
 
 export type SitePage = 'home' | 'hosts' | 'partners';
 
@@ -11,7 +12,7 @@ export default function Header({
   showHostLinks = false,
   showPartnerProgram = false,
 }: {
-  onShowAuth: () => void;
+  onShowAuth: (mode?: AuthMode) => void;
   onShowDashboard: () => void;
   onNavigate?: (page: SitePage) => void;
   showHostLinks?: boolean;
@@ -85,12 +86,20 @@ export default function Header({
                 </button>
               </div>
             ) : (
-              <button
-                onClick={onShowAuth}
-                className="px-7 py-3.5 bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 text-white font-bold rounded-xl hover:shadow-xl transition-all duration-300 shadow-lg transform hover:scale-105"
-              >
-                Join StayLoop
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => onShowAuth('signin')}
+                  className="px-5 py-3 text-gray-700 hover:text-orange-600 font-bold transition-colors duration-200"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => onShowAuth('signup')}
+                  className="px-7 py-3.5 bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 text-white font-bold rounded-xl hover:shadow-xl transition-all duration-300 shadow-lg transform hover:scale-105"
+                >
+                  Join StayLoop
+                </button>
+              </div>
             )}
           </div>
 
@@ -130,12 +139,20 @@ export default function Header({
                   </button>
                 </>
               ) : (
-                <button
-                  onClick={onShowAuth}
-                  className="px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-md"
-                >
-                  Join StayLoop
-                </button>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => onShowAuth('signin')}
+                    className="px-6 py-3 border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all"
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    onClick={() => onShowAuth('signup')}
+                    className="px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-md"
+                  >
+                    Join StayLoop
+                  </button>
+                </div>
               )}
             </div>
           </div>

@@ -2,8 +2,16 @@ import { X } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
-export default function AuthModal({ onClose }: { onClose: () => void }) {
-  const [isSignUp, setIsSignUp] = useState(false);
+export type AuthMode = 'signin' | 'signup';
+
+export default function AuthModal({
+  onClose,
+  initialMode = 'signin',
+}: {
+  onClose: () => void;
+  initialMode?: AuthMode;
+}) {
+  const [isSignUp, setIsSignUp] = useState(initialMode === 'signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');

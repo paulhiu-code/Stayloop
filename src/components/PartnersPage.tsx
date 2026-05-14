@@ -12,12 +12,12 @@ import {
   Users,
 } from 'lucide-react';
 import Header, { SitePage } from './Header';
-import AuthModal from './AuthModal';
+import AuthModal, { AuthMode } from './AuthModal';
 
 type PartnersPageProps = {
   onClose: () => void;
   onNavigate: (page: SitePage) => void;
-  onShowAuth: () => void;
+  onShowAuth: (mode?: AuthMode) => void;
 };
 
 const splitRows = [
@@ -51,9 +51,11 @@ const rules = [
 
 export default function PartnersPage({ onClose, onNavigate, onShowAuth }: PartnersPageProps) {
   const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>('signup');
 
-  function openAuth() {
-    onShowAuth();
+  function openAuth(mode: AuthMode = 'signup') {
+    setAuthMode(mode);
+    onShowAuth(mode);
     setShowAuth(true);
   }
 
@@ -83,7 +85,7 @@ export default function PartnersPage({ onClose, onNavigate, onShowAuth }: Partne
             </p>
             <div className="mt-10 flex flex-wrap gap-4">
               <button
-                onClick={openAuth}
+                onClick={() => openAuth('signup')}
                 className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-8 py-4 text-lg font-bold text-white shadow-xl transition hover:scale-105"
               >
                 Apply as a host partner
@@ -220,7 +222,7 @@ export default function PartnersPage({ onClose, onNavigate, onShowAuth }: Partne
         </button>
       </footer>
 
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} initialMode={authMode} />}
     </div>
   );
 }

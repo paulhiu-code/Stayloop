@@ -12,7 +12,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import Header, { SitePage } from './Header';
-import AuthModal from './AuthModal';
+import AuthModal, { AuthMode } from './AuthModal';
 
 type HostsPageProps = {
   onClose: () => void;
@@ -44,11 +44,17 @@ const hostFeatures = [
 
 export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
   const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>('signup');
+
+  function openAuth(mode: AuthMode = 'signup') {
+    setAuthMode(mode);
+    setShowAuth(true);
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
-        onShowAuth={() => setShowAuth(true)}
+        onShowAuth={openAuth}
         onShowDashboard={onClose}
         onNavigate={onNavigate}
         showHostLinks
@@ -73,7 +79,7 @@ export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
             </p>
             <div className="mt-10 flex flex-wrap gap-4">
               <button
-                onClick={() => setShowAuth(true)}
+                onClick={() => openAuth('signup')}
                 className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-8 py-4 text-lg font-bold text-white shadow-xl transition hover:scale-105"
               >
                 Start listing
@@ -191,7 +197,7 @@ export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
         </div>
       </footer>
 
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} initialMode={authMode} />}
     </div>
   );
 }
