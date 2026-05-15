@@ -168,6 +168,14 @@ Receives webhooks from PMS providers:
 - Validates connection and stores event
 - Triggers appropriate sync function
 
+### Edge Function secrets
+
+Set these Supabase Edge Function secrets before syncing:
+
+- `STAYLOOP_SUPABASE_URL`
+- `STAYLOOP_SUPABASE_ANON_KEY`
+- `STAYLOOP_SUPABASE_SERVICE_ROLE_KEY`
+
 ---
 
 ## Usage

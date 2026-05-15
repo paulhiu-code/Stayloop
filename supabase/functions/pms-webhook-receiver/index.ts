@@ -13,8 +13,8 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      Deno.env.get('STAYLOOP_SUPABASE_URL')!,
+      Deno.env.get('STAYLOOP_SUPABASE_SERVICE_ROLE_KEY')!
     );
 
     // Parse webhook data
@@ -61,14 +61,14 @@ Deno.serve(async (req: Request) => {
     if (eventType.includes('booking') || eventType.includes('reservation')) {
       // Trigger booking sync
       const syncUrl = provider === 'ownerrez'
-        ? `${Deno.env.get('SUPABASE_URL')}/functions/v1/pms-ownerrez-sync`
-        : `${Deno.env.get('SUPABASE_URL')}/functions/v1/pms-guesty-sync`;
+        ? `${Deno.env.get('STAYLOOP_SUPABASE_URL')}/functions/v1/pms-ownerrez-sync`
+        : `${Deno.env.get('STAYLOOP_SUPABASE_URL')}/functions/v1/pms-guesty-sync`;
 
       await fetch(syncUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+          'Authorization': `Bearer ${Deno.env.get('STAYLOOP_SUPABASE_ANON_KEY')}`,
         },
         body: JSON.stringify({
           action: 'webhook',
