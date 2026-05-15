@@ -3,6 +3,7 @@ import { User } from '@supabase/supabase-js';
 import { supabase, Profile } from '../lib/supabase';
 
 export type UserType = Profile['user_type'];
+export type OAuthProvider = 'google' | 'apple';
 
 type AuthContextType = {
   user: User | null;
@@ -10,6 +11,7 @@ type AuthContextType = {
   loading: boolean;
   signUp: (email: string, password: string, fullName: string, userType: UserType, referralCode?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithOAuth: (provider: OAuthProvider, userType?: UserType) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserType: (userType: UserType) => Promise<void>;
 };
@@ -55,6 +57,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (error) throw error;
+
+      const pendingUserType = window.localStorage.getItem('stayloop_pending_user_type') as UserType | null;
+      if (data && pendingUserType && data.user_type !== pendingUserType) {
+        const { data: updatedProfile, error: updateError } = await supabase
+          .from('profiles')
+          .update({ user_type: pendingUserType })
+          .eq('id', userId)
+          .select('*')
+          .maybeSingle();
+
+        if (updateError) throw updateError;
+        window.localStorage.removeItem('stayloop_pending_user_type');
+        setProfile(updatedProfile);
+        return;
+      }
+
+      if (pendingUserType) {
+        window.localStorage.removeItem('stayloop_pending_user_type');
+      }
+
       setProfile(data);
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -117,6 +139,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   }
 
+  async function signInWithOAuth(provider: OAuthProvider, userType?: UserType) {
+    if (userType) {
+      window.localStorage.setItem('stayloop_pending_user_type', userType);
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+
+    if (error) throw error;
+  }
+
   async function signOut() {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
@@ -135,7 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut, updateUserType }}>
+    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signInWithOAuth, signOut, updateUserType }}>
       {children}
     </AuthContext.Provider>
   );

@@ -38,7 +38,10 @@ BEGIN
   VALUES (
     NEW.id,
     NEW.email,
-    NULLIF(NEW.raw_user_meta_data->>'full_name', ''),
+    COALESCE(
+      NULLIF(NEW.raw_user_meta_data->>'full_name', ''),
+      NULLIF(NEW.raw_user_meta_data->>'name', '')
+    ),
     v_user_type,
     v_referrer_id,
     generate_referral_code()

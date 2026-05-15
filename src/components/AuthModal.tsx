@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useAuth, UserType } from '../contexts/AuthContext';
 
 export type AuthMode = 'signin' | 'signup';
-type JoinIntent = 'guest' | 'host' | 'both';
+type JoinIntent = 'guest' | 'host';
 
 const joinIntentOptions: Array<{
   id: JoinIntent;
@@ -12,18 +12,13 @@ const joinIntentOptions: Array<{
 }> = [
   {
     id: 'guest',
-    title: 'Book stays',
+    title: 'Join as a guest',
     copy: 'Find homes, cabins, beach houses, and city stays.',
   },
   {
     id: 'host',
-    title: 'List my property',
-    copy: 'Bring your rentals onto StayLoop and manage host tools.',
-  },
-  {
-    id: 'both',
-    title: 'Both',
-    copy: 'Book trips and manage properties from one account.',
+    title: 'Join as a host',
+    copy: 'List properties and keep full guest access automatically.',
   },
 ];
 
@@ -47,7 +42,7 @@ export default function AuthModal({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithOAuth } = useAuth();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,6 +59,17 @@ export default function AuthModal({
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleOAuth(provider: 'google' | 'apple') {
+    setError('');
+    setLoading(true);
+    try {
+      await signInWithOAuth(provider, isSignUp ? userTypeFromIntent(joinIntent) : undefined);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'OAuth sign-in failed');
       setLoading(false);
     }
   }
@@ -111,7 +117,7 @@ export default function AuthModal({
                     How do you want to use StayLoop?
                   </label>
                   <p className="mt-1 text-xs text-gray-500">
-                    Hosts automatically keep guest access too.
+                    Host accounts automatically include guest access.
                   </p>
                 </div>
                 <div className="grid gap-3">
@@ -145,6 +151,35 @@ export default function AuthModal({
               </div>
             </>
           )}
+
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => handleOAuth('google')}
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-sm font-extrabold text-blue-600">
+                G
+              </span>
+              Continue with Google
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuth('apple')}
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-3 rounded-xl bg-gray-950 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span className="text-sm font-extrabold">A</span>
+              Continue with Apple
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-gray-200"></div>
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">or</span>
+            <div className="h-px flex-1 bg-gray-200"></div>
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
