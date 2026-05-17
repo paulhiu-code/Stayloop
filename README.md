@@ -11,5 +11,7 @@ StayLoop is a Vite React app. For a permanent public site, deploy it to Vercel w
 - Required environment variables:
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_ANON_KEY`
+  - `VITE_API_BASE_URL`
+  - `VITE_STRIPE_PUBLISHABLE_KEY`
 
 See `DEPLOYMENT.md` for the full deployment checklist.

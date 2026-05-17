@@ -7,6 +7,9 @@ import AuthModal, { AuthMode } from './components/AuthModal';
 import Dashboard from './components/Dashboard';
 import HostsPage from './components/HostsPage';
 import PartnersPage from './components/PartnersPage';
+import HostOnboarding from './components/HostOnboarding';
+import HostDashboard from './components/HostDashboard';
+import CheckoutPage from './components/CheckoutPage';
 import { supabase, Property } from './lib/supabase';
 import { showcaseProperties } from './data/showcase';
 
@@ -61,12 +64,18 @@ const featuredMarkets = [
 function pageFromPath(path: string): SitePage {
   if (path === '/hosts') return 'hosts';
   if (path === '/partners') return 'partners';
+  if (path === '/host-onboarding') return 'host-onboarding';
+  if (path === '/host-dashboard') return 'host-dashboard';
+  if (path === '/checkout') return 'checkout';
   return 'home';
 }
 
 function pathFromPage(page: SitePage) {
   if (page === 'hosts') return '/hosts';
   if (page === 'partners') return '/partners';
+  if (page === 'host-onboarding') return '/host-onboarding';
+  if (page === 'host-dashboard') return '/host-dashboard';
+  if (page === 'checkout') return '/checkout';
   return '/';
 }
 
@@ -162,6 +171,18 @@ function AppContent() {
 
   if (page === 'partners') {
     return <PartnersPage onClose={() => navigate('home')} onNavigate={navigate} onShowAuth={() => openAuth('signup')} />;
+  }
+
+  if (page === 'host-onboarding') {
+    return <HostOnboarding onClose={() => navigate('home')} />;
+  }
+
+  if (page === 'host-dashboard') {
+    return <HostDashboard onClose={() => navigate('home')} />;
+  }
+
+  if (page === 'checkout') {
+    return <CheckoutPage onClose={() => navigate('home')} />;
   }
 
   if (showDashboard) {
