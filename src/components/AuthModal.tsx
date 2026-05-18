@@ -60,7 +60,7 @@ export default function AuthModal({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [joinIntent, setJoinIntent] = useState<JoinIntent>('guest');
+  const [joinIntent, setJoinIntent] = useState<JoinIntent>('host');
   const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
