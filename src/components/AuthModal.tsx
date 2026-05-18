@@ -49,6 +49,16 @@ function GoogleLogo() {
   );
 }
 
+function formatAuthError(err: unknown) {
+  const message = err instanceof Error ? err.message : 'An error occurred';
+
+  if (message.toLowerCase().includes('password should contain')) {
+    return 'Uppercase, lowercase letters, digits and symbols';
+  }
+
+  return message;
+}
+
 export default function AuthModal({
   onClose,
   initialMode = 'signin',
@@ -80,7 +90,7 @@ export default function AuthModal({
       }
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }
