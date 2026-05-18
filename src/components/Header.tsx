@@ -68,10 +68,9 @@ export default function Header({
                 </button>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-semibold text-gray-900">
                       {profile?.full_name || 'User'}
                     </div>
-                    <div className="text-xs text-gray-500">{profile?.referral_code}</div>
                   </div>
                   <div className="w-11 h-11 bg-gradient-to-br from-orange-500 via-rose-500 to-orange-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg border-2 border-white">
                     {profile?.full_name?.[0] || <User className="w-5 h-5" />}
