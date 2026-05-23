@@ -21,7 +21,11 @@ type BookingWidgetProps = {
 };
 
 function buildUnavailableSet(calendarDays: { date: string; is_available: boolean }[]) {
-  return new Set(calendarDays.filter((day) => day.is_available === false).map((day) => day.date));
+  return new Set(
+    calendarDays
+      .filter((day) => day.is_available === false || day.is_available === null)
+      .map((day) => day.date)
+  );
 }
 
 export default function BookingWidget({
