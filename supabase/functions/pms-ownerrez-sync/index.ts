@@ -9,7 +9,7 @@ const corsHeaders = {
 const OWNERREZ_API_BASE = 'https://api.ownerrez.com/v2';
 
 interface SyncRequest {
-  action: 'sync_properties' | 'sync_bookings' | 'sync_availability' | 'webhook';
+  action: 'sync_properties' | 'sync_bookings' | 'sync_availability' | 'webhook' | 'test_ownerrez';
   pmsConnectionId: string;
   propertyId?: string;
   webhookData?: any;
@@ -22,10 +22,29 @@ function getOwnerRezEmail(connection: Record<string, unknown>): string | null {
 }
 
 
+function getServiceRoleKey(): string | undefined {
+  const custom = Deno.env.get('STAYLOOP_SUPABASE_SERVICE_ROLE_KEY');
+  if (custom) return custom;
+
+  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (legacy) return legacy;
+
+  const secretKeys = Deno.env.get('SUPABASE_SECRET_KEYS');
+  if (secretKeys) {
+    try {
+      const parsed = JSON.parse(secretKeys) as Record<string, string>;
+      return parsed.service_role || parsed.default || Object.values(parsed)[0];
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
 function createServiceSupabaseClient() {
   const supabaseUrl = Deno.env.get('STAYLOOP_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL');
-  const serviceRoleKey =
-    Deno.env.get('STAYLOOP_SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const serviceRoleKey = getServiceRoleKey();
 
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error(
@@ -91,6 +110,7 @@ async function ownerRezFetch(
       );
     }
     headers.set('Authorization', `Basic ${btoa(`${email}:${normalizedToken}`)}`);
+    headers.set('User-Agent', 'StayLoop/1.0');
   } else {
     headers.set('Authorization', `Bearer ${normalizedToken}`);
     headers.set('User-Agent', 'StayLoop/1.0');
@@ -252,7 +272,7 @@ Deno.serve(async (req: Request) => {
       throw new Error('PMS connection not found');
     }
 
-    const ownerRezToken = connection.oauth_access_token || connection.api_credentials?.access_token;
+    const ownerRezToken = String(connection.oauth_access_token || connection.api_credentials?.access_token || '').trim();
     if (!ownerRezToken) {
       throw new Error('OwnerRez access token is missing');
     }
@@ -292,6 +312,9 @@ Deno.serve(async (req: Request) => {
     let result;
 
     switch (action) {
+      case 'test_ownerrez':
+        result = await testOwnerRezConnection(resolvedConnection, ownerRezToken);
+        break;
       case 'sync_properties':
         result = await syncProperties(supabase, resolvedConnection, ownerRezToken);
         break;
@@ -350,6 +373,21 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+async function testOwnerRezConnection(connection: Record<string, unknown>, token: string) {
+  const properties = await fetchAllOwnerRezItems(
+    connection,
+    token,
+    '/properties?active=true'
+  );
+  return {
+    processed: properties.length,
+    succeeded: properties.length,
+    failed: 0,
+    propertyCount: properties.length,
+    email: getOwnerRezEmail(connection),
+  };
+}
 
 async function syncProperties(supabase: any, connection: any, token: string) {
   const properties = await fetchAllOwnerRezItems(

@@ -6,6 +6,8 @@ import {
   getPMSConnections,
   syncPMSProperties,
   syncPMSBookings,
+  formatSyncError,
+  testOwnerRezConnection,
   getSyncLogs,
   deletePMSConnection,
   togglePMSConnection,
@@ -47,6 +49,18 @@ export default function PMSSettings() {
     }
   };
 
+  const handleTestConnection = async (connectionId: string) => {
+    setSyncing(connectionId);
+    try {
+      alert(await testOwnerRezConnection(connectionId));
+    } catch (error) {
+      console.error('OwnerRez test failed:', error);
+      alert(formatSyncError(error));
+    } finally {
+      setSyncing(null);
+    }
+  };
+
   const handleSync = async (connectionId: string, type: 'properties' | 'bookings') => {
     setSyncing(connectionId);
     try {
@@ -55,18 +69,17 @@ export default function PMSSettings() {
       } else {
         await syncPMSBookings(connectionId);
       }
-      await loadConnections();
     } catch (error) {
       console.error('Sync failed:', error);
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === 'object' && error !== null && 'message' in error
-            ? String((error as { message: unknown }).message)
-            : 'Sync failed. Please try again.';
-      alert(message);
+      alert(formatSyncError(error));
     } finally {
       setSyncing(null);
+    }
+
+    try {
+      await loadConnections();
+    } catch (error) {
+      console.error('Failed to refresh PMS status:', error);
     }
   };
 
@@ -374,6 +387,15 @@ export default function PMSSettings() {
                 </div>
 
                 <div className="flex gap-3 mb-6">
+                  <button
+                        type="button"
+                        onClick={() => handleTestConnection(connection.id)}
+                        disabled={syncing === connection.id}
+                        className="rounded-xl border border-orange-300 bg-white px-4 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Test OwnerRez
+                      </button>
+
                   <button
                     onClick={() => handleSync(connection.id, 'properties')}
                     disabled={syncing === connection.id || !connection.is_active}

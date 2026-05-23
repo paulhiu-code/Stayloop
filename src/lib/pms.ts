@@ -1,5 +1,31 @@
 import { supabase } from './supabase';
 
+export function formatSyncError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    for (const key of ['message', 'error', 'details', 'hint']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+    }
+    try {
+      return JSON.stringify(error).slice(0, 600);
+    } catch {
+      return String(error);
+    }
+  }
+  return 'Unknown sync error. Hard-refresh the page (Ctrl+Shift+R), then try again.';
+}
+
+
+
 export type PMSProvider = 'ownerrez' | 'guesty';
 
 export interface PMSConnection {
@@ -85,11 +111,17 @@ async function invokePMSEdgeFunction(
   }
 
   if (!response.ok) {
+    const payloadMessage =
+      payload && typeof payload === 'object'
+        ? (typeof payload.error === 'string' && payload.error) ||
+          (typeof payload.message === 'string' && payload.message) ||
+          (typeof payload.msg === 'string' && payload.msg) ||
+          null
+        : null;
     const detail =
-      payload && typeof payload.error === 'string'
-        ? payload.error
-        : raw?.slice(0, 400) ||
-          `Sync failed (HTTP ${response.status}). Open Supabase → Edge Functions → pms-ownerrez-sync → Logs.`;
+      payloadMessage ||
+      (raw?.trim() ? raw.slice(0, 500) : '') ||
+      `Sync failed (HTTP ${response.status}). Check Supabase Edge Function logs for pms-ownerrez-sync.`;
     throw new Error(detail);
   }
 
@@ -181,6 +213,17 @@ export async function getPMSConnections(): Promise<PMSConnection[]> {
 
   if (error) throw error;
   return data || [];
+}
+
+export async function testOwnerRezConnection(connectionId: string): Promise<string> {
+  const payload = await invokePMSEdgeFunction('pms-ownerrez-sync', {
+    action: 'test_ownerrez',
+    pmsConnectionId: connectionId,
+  });
+  const result = payload?.result as { propertyCount?: number; email?: string } | undefined;
+  const count = result?.propertyCount ?? 0;
+  const email = result?.email ?? 'unknown';
+  return `OwnerRez connection OK. Found ${count} active properties for ${email}.`;
 }
 
 export async function syncPMSProperties(connectionId: string): Promise<unknown> {
