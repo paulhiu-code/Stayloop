@@ -23,6 +23,7 @@ export default function PMSSettings() {
   const [selectedProvider, setSelectedProvider] = useState<PMSProvider | null>(null);
   const [accountName, setAccountName] = useState('');
   const [accessToken, setAccessToken] = useState('');
+  const [ownerRezEmail, setOwnerRezEmail] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -57,13 +58,7 @@ export default function PMSSettings() {
       await loadConnections();
     } catch (error) {
       console.error('Sync failed:', error);
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === 'object' && error !== null && 'message' in error
-            ? String((error as { message: unknown }).message)
-            : 'Sync failed. Please try again.';
-      alert(message);
+      alert('Sync failed. Please try again.');
     } finally {
       setSyncing(null);
     }

@@ -71,7 +71,8 @@ export async function createPMSConnection(
   provider: PMSProvider,
   accessToken: string,
   refreshToken?: string,
-  accountName?: string
+  accountName?: string,
+  apiCredentials?: Record<string, unknown>
 ): Promise<PMSConnection> {
   const { data: session } = await supabase.auth.getSession();
   if (!session.session) throw new Error('Not authenticated');
@@ -84,6 +85,7 @@ export async function createPMSConnection(
       account_name: accountName,
       oauth_access_token: accessToken,
       oauth_refresh_token: refreshToken,
+      api_credentials: apiCredentials ?? null,
       is_active: true,
     })
     .select()
@@ -124,12 +126,6 @@ export async function syncPMSProperties(connectionId: string): Promise<unknown> 
   });
 
   if (error) throw error;
-
-  const result = data as { success?: boolean; error?: string } | null;
-  if (result?.success === false) {
-    throw new Error(result.error || 'Property sync failed.');
-  }
-
   return data;
 }
 
