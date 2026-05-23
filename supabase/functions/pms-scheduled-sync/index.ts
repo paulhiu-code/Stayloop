@@ -33,11 +33,19 @@ function isAutoSyncEnabled(syncSettings: unknown): boolean {
   return true;
 }
 
-async function invokeOwnerRezSyncAll(
+function syncSettingsEnabled(syncSettings: unknown, key: string): boolean {
+  if (!syncSettings || typeof syncSettings !== 'object') return true;
+  const settings = syncSettings as Record<string, unknown>;
+  if (settings.auto_sync === false) return false;
+  if (settings[key] === false) return false;
+  return true;
+}
+
+async function invokeOwnerRezSync(
   supabaseUrl: string,
   serviceRoleKey: string,
   cronSecret: string,
-  pmsConnectionId: string
+  body: Record<string, unknown>
 ) {
   const response = await fetch(`${supabaseUrl}/functions/v1/pms-ownerrez-sync`, {
     method: 'POST',
@@ -47,10 +55,7 @@ async function invokeOwnerRezSyncAll(
       'Content-Type': 'application/json',
       'x-stayloop-cron-secret': cronSecret,
     },
-    body: JSON.stringify({
-      action: 'sync_all',
-      pmsConnectionId,
-    }),
+    body: JSON.stringify(body),
   });
 
   const raw = await response.text();
@@ -68,6 +73,102 @@ async function invokeOwnerRezSyncAll(
   }
 
   return payload;
+}
+
+async function syncOwnerRezConnectionInChunks(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  cronSecret: string,
+  connection: {
+    id: string;
+    account_name: string | null;
+    sync_settings: unknown;
+  }
+) {
+  const { data: mappings, error: mappingsError } = await supabase
+    .from('pms_property_mappings')
+    .select('pms_property_id, auto_sync_enabled')
+    .eq('pms_connection_id', connection.id);
+
+  if (mappingsError) throw mappingsError;
+
+  const calendarResults: Array<Record<string, unknown>> = [];
+  let calendarsSucceeded = 0;
+  let calendarsFailed = 0;
+
+  if (syncSettingsEnabled(connection.sync_settings, 'availability')) {
+    for (const mapping of mappings || []) {
+      if (mapping.auto_sync_enabled === false) continue;
+
+      const propertyId = String(mapping.pms_property_id);
+      try {
+        const payload = await invokeOwnerRezSync(supabaseUrl, serviceRoleKey, cronSecret, {
+          action: 'sync_availability',
+          pmsConnectionId: connection.id,
+          propertyId,
+        });
+        calendarsSucceeded++;
+        calendarResults.push({
+          propertyId,
+          success: true,
+          result: payload?.result ?? payload,
+        });
+      } catch (error) {
+        calendarsFailed++;
+        console.error(`Calendar sync failed for property ${propertyId}:`, error);
+        calendarResults.push({
+          propertyId,
+          success: false,
+          error: error instanceof Error ? error.message : 'Calendar sync failed',
+        });
+      }
+    }
+  }
+
+  let bookings: Record<string, unknown> | null = null;
+  let bookingsError: string | null = null;
+
+  if (syncSettingsEnabled(connection.sync_settings, 'bookings')) {
+    try {
+      const payload = await invokeOwnerRezSync(supabaseUrl, serviceRoleKey, cronSecret, {
+        action: 'sync_bookings',
+        pmsConnectionId: connection.id,
+      });
+      bookings = (payload?.result as Record<string, unknown>) ?? payload;
+    } catch (error) {
+      bookingsError = error instanceof Error ? error.message : 'Booking sync failed';
+      console.error(`Booking sync failed for connection ${connection.id}:`, error);
+    }
+  }
+
+  const calendarsProcessed = calendarsSucceeded + calendarsFailed;
+  const overallSuccess =
+    calendarsFailed === 0 && !bookingsError && (calendarsProcessed > 0 || bookings !== null);
+
+  await supabase
+    .from('pms_connections')
+    .update({
+      last_sync_at: new Date().toISOString(),
+      sync_status: overallSuccess ? 'completed' : calendarsSucceeded > 0 ? 'partial' : 'failed',
+      sync_error: overallSuccess
+        ? null
+        : bookingsError ||
+          (calendarsFailed > 0 ? `${calendarsFailed} property calendar sync(s) failed` : null),
+    })
+    .eq('id', connection.id);
+
+  return {
+    calendars: {
+      processed: calendarsProcessed,
+      succeeded: calendarsSucceeded,
+      failed: calendarsFailed,
+      results: calendarResults,
+    },
+    bookings,
+    bookingsError,
+    success: overallSuccess,
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -119,17 +220,18 @@ Deno.serve(async (req: Request) => {
       }
 
       try {
-        const payload = await invokeOwnerRezSyncAll(
+        const syncResult = await syncOwnerRezConnectionInChunks(
+          supabase,
           supabaseUrl,
           serviceRoleKey,
           cronSecret,
-          connection.id
+          connection
         );
         results.push({
           connectionId: connection.id,
           accountName: connection.account_name,
-          success: true,
-          result: payload?.result ?? payload,
+          success: syncResult.success,
+          result: syncResult,
         });
       } catch (syncError) {
         console.error(`Scheduled sync failed for ${connection.id}:`, syncError);
