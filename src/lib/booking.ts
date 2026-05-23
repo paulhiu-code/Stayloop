@@ -143,6 +143,27 @@ export async function isRangeAvailable(
   return { available: true };
 }
 
+
+export function effectiveDisplayNightlyRate(
+  property: Property,
+  calendarDays: CalendarDay[] = []
+): number {
+  if (Number(property.base_price) > 0) {
+    return Number(property.base_price);
+  }
+
+  const calendarRates = calendarDays
+    .map((day) => (day.price_override != null ? Number(day.price_override) : 0))
+    .filter((rate) => rate > 0);
+
+  if (calendarRates.length === 0) {
+    return 0;
+  }
+
+  const total = calendarRates.reduce((sum, rate) => sum + rate, 0);
+  return Number((total / calendarRates.length).toFixed(2));
+}
+
 export function calculateQuote(
   property: Property,
   checkIn: string,

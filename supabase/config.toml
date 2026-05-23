@@ -1,0 +1,8 @@
+# Supabase local config. For hosted projects, also create a Cron Job in the
+# dashboard that POSTs to pms-scheduled-sync every 6 hours with x-stayloop-cron-secret.
+
+[functions.pms-scheduled-sync]
+verify_jwt = false
+
+[functions.pms-webhook-receiver]
+verify_jwt = false
