@@ -73,7 +73,21 @@ export default function PMSSettings() {
         await syncPMSBookings(connectionId);
       } else if (type === 'availability') {
         const result = await syncAllPMSAvailability(connectionId);
-        alert(`Calendar sync finished: ${result.succeeded}/${result.processed} properties updated.`);
+        const summaryLines = result.properties.map((property) => {
+          if (property.error) {
+            return `• Property ${property.pmsPropertyId}: failed — ${property.error}`;
+          }
+          return `• Property ${property.pmsPropertyId}: ${property.blockedNights ?? 0} blocked nights, ${property.availableNights ?? 0} open nights (${property.pricingNights ?? 0} priced nights synced)`;
+        });
+        const summary = summaryLines.length > 0 ? `
+
+${summaryLines.join('
+')}` : '';
+        alert(
+          `Calendar sync finished: ${result.succeeded}/${result.processed} properties updated.${summary}
+
+If blocked nights is 0 for a property that has reservations in OwnerRez, the sync could not read reservations — check OwnerRez email on the connection and Edge Function logs.`
+        );
       } else {
         await syncAllPMS(connectionId);
         alert('Full sync finished (calendars, pricing, and bookings).');

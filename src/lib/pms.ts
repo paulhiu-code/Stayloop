@@ -328,29 +328,63 @@ export async function setPMSAutoSync(connectionId: string, enabled: boolean): Pr
   if (error) throw error;
 }
 
+export type CalendarSyncPropertyResult = {
+  pmsPropertyId: string;
+  blockedNights?: number;
+  availableNights?: number;
+  pricingNights?: number;
+  error?: string;
+};
+
 export async function syncAllPMSAvailability(connectionId: string): Promise<{
   processed: number;
   succeeded: number;
   failed: number;
+  properties: CalendarSyncPropertyResult[];
 }> {
   const mappings = await getPropertyMappings(connectionId);
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
+  const properties: CalendarSyncPropertyResult[] = [];
 
   for (const mapping of mappings) {
     if (mapping.auto_sync_enabled === false) continue;
     processed += 1;
     try {
-      await syncPMSAvailability(connectionId, mapping.pms_property_id);
+      const response = (await syncPMSAvailability(connectionId, mapping.pms_property_id)) as {
+        success?: boolean;
+        result?: {
+          blockedNights?: number;
+          availableNights?: number;
+          pricingNights?: number;
+        };
+        error?: string;
+      };
+
+      if (response?.success === false) {
+        throw new Error(response.error || 'Calendar sync failed');
+      }
+
+      const result = response?.result;
+      properties.push({
+        pmsPropertyId: mapping.pms_property_id,
+        blockedNights: result?.blockedNights,
+        availableNights: result?.availableNights,
+        pricingNights: result?.pricingNights,
+      });
       succeeded += 1;
     } catch (error) {
       console.error(`Availability sync failed for ${mapping.pms_property_id}:`, error);
+      properties.push({
+        pmsPropertyId: mapping.pms_property_id,
+        error: error instanceof Error ? error.message : String(error),
+      });
       failed += 1;
     }
   }
 
-  return { processed, succeeded, failed };
+  return { processed, succeeded, failed, properties };
 }
 
 export async function syncAllPMS(connectionId: string): Promise<unknown> {
