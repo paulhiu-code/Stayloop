@@ -9,7 +9,7 @@ const corsHeaders = {
 const OWNERREZ_API_BASE = 'https://api.ownerrez.com/v2';
 
 interface SyncRequest {
-  action: 'sync_properties' | 'sync_bookings' | 'sync_availability' | 'webhook' | 'test_ownerrez';
+  action: 'sync_properties' | 'sync_bookings' | 'sync_availability' | 'sync_all' | 'webhook' | 'test_ownerrez';
   pmsConnectionId: string;
   propertyId?: string;
   webhookData?: any;
@@ -24,6 +24,8 @@ function syncTypeFromAction(action: string): string {
       return 'booking';
     case 'sync_availability':
       return 'availability';
+    case 'sync_all':
+      return 'full';
     case 'webhook':
       return 'webhook';
     case 'test_ownerrez':
@@ -109,14 +111,8 @@ async function resolveOwnerRezEmail(
   };
 }
 
-async function ownerRezFetch(
-  connection: Record<string, unknown>,
-  token: string,
-  path: string,
-  init?: RequestInit
-): Promise<Response> {
-  const url = path.startsWith('http') ? path : `${OWNERREZ_API_BASE}${path}`;
-  const headers = new Headers(init?.headers);
+function buildOwnerRezAuthHeaders(connection: Record<string, unknown>, token: string): Headers {
+  const headers = new Headers();
   headers.set('Content-Type', 'application/json');
 
   const normalizedToken = token.trim();
@@ -128,13 +124,25 @@ async function ownerRezFetch(
       );
     }
     headers.set('Authorization', `Basic ${btoa(`${email}:${normalizedToken}`)}`);
-    headers.set('User-Agent', 'StayLoop/1.0');
   } else {
     headers.set('Authorization', `Bearer ${normalizedToken}`);
-    headers.set('User-Agent', 'StayLoop/1.0');
   }
 
-  return fetch(url, { ...init, headers });
+  headers.set('User-Agent', 'StayLoop/1.0');
+  return headers;
+}
+
+async function ownerRezFetch(
+  connection: Record<string, unknown>,
+  token: string,
+  path: string,
+  init?: RequestInit
+): Promise<Response> {
+  const url = path.startsWith('http') ? path : `${OWNERREZ_API_BASE}${path}`;
+  const headers = buildOwnerRezAuthHeaders(connection, token);
+  const requestHeaders = new Headers(init?.headers);
+  headers.forEach((value, key) => requestHeaders.set(key, value));
+  return fetch(url, { ...init, headers: requestHeaders });
 }
 
 async function fetchOwnerRezJson(
@@ -177,6 +185,249 @@ async function fetchAllOwnerRezItems(
   }
 
   return items;
+}
+
+
+const OWNERREZ_V1_BASE = 'https://api.ownerrez.com/v1';
+const PRICING_SYNC_DAYS = 548;
+const PRICING_CHUNK_DAYS = 90;
+
+type PricingNight = {
+  date: string;
+  amount: number;
+  minNights: number;
+  isStayDisallowed: boolean;
+};
+
+function formatDateOnly(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+async function fetchOwnerRezV1Json(
+  connection: Record<string, unknown>,
+  token: string,
+  path: string
+): Promise<unknown> {
+  const url = path.startsWith('http') ? path : `${OWNERREZ_V1_BASE}${path}`;
+  const response = await fetch(url, { headers: buildOwnerRezAuthHeaders(connection, token) });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`OwnerRez API error (${response.status}): ${body || response.statusText}`);
+  }
+
+  return response.json();
+}
+
+function normalizePricingNight(raw: Record<string, unknown>): PricingNight {
+  return {
+    date: String(raw.date),
+    amount: Number(raw.amount ?? 0),
+    minNights: Number(raw.minNights ?? raw.min_nights ?? 1),
+    isStayDisallowed: Boolean(raw.isStayDisallowed ?? raw.is_stay_disallowed ?? false),
+  };
+}
+
+async function fetchListingPricingNights(
+  connection: Record<string, unknown>,
+  token: string,
+  propertyId: string
+): Promise<PricingNight[]> {
+  const nights: PricingNight[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const endDate = addDays(today, PRICING_SYNC_DAYS);
+
+  let chunkStart = new Date(today);
+  while (chunkStart < endDate) {
+    const chunkEnd = addDays(chunkStart, PRICING_CHUNK_DAYS - 1);
+    const boundedEnd = chunkEnd > endDate ? endDate : chunkEnd;
+
+    const path =
+      `/listings/${propertyId}/pricing?start=${formatDateOnly(chunkStart)}&end=${formatDateOnly(boundedEnd)}&includePricingRules=true`;
+    const payload = await fetchOwnerRezV1Json(connection, token, path);
+
+    if (Array.isArray(payload)) {
+      for (const entry of payload) {
+        if (entry && typeof entry === 'object') {
+          nights.push(normalizePricingNight(entry as Record<string, unknown>));
+        }
+      }
+    }
+
+    chunkStart = addDays(boundedEnd, 1);
+  }
+
+  return nights;
+}
+
+function deriveBasePrice(nights: PricingNight[]): number {
+  const amounts = nights.map((night) => night.amount).filter((amount) => amount > 0);
+  if (amounts.length === 0) return 0;
+
+  const total = amounts.reduce((sum, amount) => sum + amount, 0);
+  return Number((total / amounts.length).toFixed(2));
+}
+
+function deriveMinNights(nights: PricingNight[]): number | null {
+  const values = nights.map((night) => night.minNights).filter((value) => value > 0);
+  if (values.length === 0) return null;
+  return Math.min(...values);
+}
+
+function expandBlockedDates(ranges: Record<string, unknown>[]): Set<string> {
+  const blocked = new Set<string>();
+
+  for (const range of ranges) {
+    const arrival = range.arrival ?? range.start ?? range.startDate;
+    const departure = range.departure ?? range.end ?? range.endDate;
+    if (typeof arrival !== 'string' || typeof departure !== 'string') continue;
+
+    let cursor = new Date(`${arrival}T12:00:00`);
+    const end = new Date(`${departure}T12:00:00`);
+    while (cursor < end) {
+      blocked.add(formatDateOnly(cursor));
+      cursor = addDays(cursor, 1);
+    }
+  }
+
+  return blocked;
+}
+
+async function fetchBlockedDates(
+  connection: Record<string, unknown>,
+  token: string,
+  propertyId: string
+): Promise<Set<string>> {
+  const today = formatDateOnly(new Date());
+  const end = formatDateOnly(addDays(new Date(), PRICING_SYNC_DAYS));
+  const path = `/listings/${propertyId}/availability?start=${today}&end=${end}`;
+  const payload = await fetchOwnerRezV1Json(connection, token, path);
+
+  if (!Array.isArray(payload)) {
+    return new Set();
+  }
+
+  return expandBlockedDates(payload as Record<string, unknown>[]);
+}
+
+async function fetchCleaningFeeFromQuote(
+  connection: Record<string, unknown>,
+  token: string,
+  propertyId: string
+): Promise<number> {
+  const arrival = formatDateOnly(addDays(new Date(), 14));
+  const departure = formatDateOnly(addDays(new Date(), 17));
+
+  const response = await ownerRezFetch(connection, token, '/quotes', {
+    method: 'POST',
+    body: JSON.stringify({
+      property_id: Number(propertyId),
+      arrival,
+      departure,
+      adults: 2,
+      generate_charges: true,
+      test: true,
+      validate_rules: false,
+    }),
+  });
+
+  if (!response.ok) {
+    return 0;
+  }
+
+  const quote = (await response.json()) as Record<string, unknown>;
+  const charges = Array.isArray(quote.charges) ? quote.charges : [];
+
+  for (const charge of charges) {
+    if (!charge || typeof charge !== 'object') continue;
+    const row = charge as Record<string, unknown>;
+    const type = String(row.type ?? '').toLowerCase();
+    const description = String(row.description ?? '').toLowerCase();
+    const amount = Number(row.amount ?? 0);
+
+    if (amount > 0 && (type.includes('clean') || description.includes('cleaning'))) {
+      return Number(amount.toFixed(2));
+    }
+  }
+
+  return 0;
+}
+
+async function syncOwnerRezPricingAndCalendar(
+  supabase: ReturnType<typeof createClient>,
+  connection: Record<string, unknown>,
+  token: string,
+  pmsPropertyId: string,
+  stayloopPropertyId: string
+) {
+  const [pricingNights, blockedDates] = await Promise.all([
+    fetchListingPricingNights(connection, token, pmsPropertyId),
+    fetchBlockedDates(connection, token, pmsPropertyId).catch(() => new Set<string>()),
+  ]);
+
+  let processed = 0;
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const night of pricingNights) {
+    processed++;
+    try {
+      const unavailable = night.isStayDisallowed || blockedDates.has(night.date);
+      await supabase.from('availability_calendar').upsert(
+        {
+          property_id: stayloopPropertyId,
+          date: night.date,
+          is_available: !unavailable,
+          price_override: night.amount > 0 ? night.amount : null,
+          min_nights_override: night.minNights > 0 ? night.minNights : null,
+          source: 'ownerrez',
+          synced_at: new Date().toISOString(),
+        },
+        { onConflict: 'property_id,date' }
+      );
+      succeeded++;
+    } catch (error) {
+      console.error(`Failed to sync pricing for ${night.date}:`, error);
+      failed++;
+    }
+  }
+
+  const basePrice = deriveBasePrice(pricingNights);
+  const minNights = deriveMinNights(pricingNights);
+  const cleaningFee = await fetchCleaningFeeFromQuote(connection, token, pmsPropertyId).catch(() => 0);
+
+  const propertyUpdate: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+    pms_integration: {
+      provider: 'ownerrez',
+      property_id: pmsPropertyId,
+      last_pricing_sync: new Date().toISOString(),
+    },
+  };
+
+  if (basePrice > 0) {
+    propertyUpdate.base_price = basePrice;
+  }
+  if (cleaningFee > 0) {
+    propertyUpdate.cleaning_fee = cleaningFee;
+  }
+  if (minNights && minNights > 0) {
+    propertyUpdate.min_nights = minNights;
+  }
+
+  await supabase.from('properties').update(propertyUpdate).eq('id', stayloopPropertyId);
+
+  return { processed, succeeded, failed, basePrice, cleaningFee };
 }
 
 function mapOwnerRezProperty(prop: Record<string, unknown>, connection: Record<string, unknown>) {
@@ -258,8 +509,12 @@ Deno.serve(async (req: Request) => {
 
     const { action, pmsConnectionId, propertyId, webhookData }: SyncRequest = await req.json();
 
+    const cronSecret = Deno.env.get('PMS_CRON_SECRET') || Deno.env.get('STAYLOOP_PMS_CRON_SECRET');
+    const providedCronSecret = req.headers.get('x-stayloop-cron-secret') || '';
+    const isCronJob = action === 'sync_all' && cronSecret && providedCronSecret === cronSecret;
+
     let authedUserId: string | null = null;
-    if (action !== 'webhook') {
+    if (action !== 'webhook' && !isCronJob) {
       const authHeader = req.headers.get('Authorization') || '';
       const token = authHeader.replace('Bearer ', '');
       const { data: userData, error: userError } = await supabase.auth.getUser(token);
@@ -351,8 +606,11 @@ Deno.serve(async (req: Request) => {
       case 'sync_availability':
         result = await syncAvailability(supabase, resolvedConnection, ownerRezToken, propertyId);
         break;
+      case 'sync_all':
+        result = await syncAllFromOwnerRez(supabase, resolvedConnection, ownerRezToken);
+        break;
       case 'webhook':
-        result = await handleWebhook(supabase, connection, webhookData);
+        result = await handleWebhook(supabase, resolvedConnection, ownerRezToken, webhookData);
         break;
       default:
         throw new Error('Invalid action');
@@ -440,6 +698,7 @@ async function syncProperties(supabase: any, connection: any, token: string) {
         .maybeSingle();
 
       const propertyData = mapOwnerRezProperty(prop, connection);
+      let stayloopPropertyId: string | null = mapping?.stayloop_property_id ?? null;
 
       if (mapping) {
         const { error: updateError } = await supabase
@@ -469,6 +728,8 @@ async function syncProperties(supabase: any, connection: any, token: string) {
           throw insertError || new Error('Failed to create StayLoop property');
         }
 
+        stayloopPropertyId = newProperty.id;
+
         await supabase.from('pms_property_mappings').insert({
           pms_connection_id: connection.id,
           stayloop_property_id: newProperty.id,
@@ -476,6 +737,20 @@ async function syncProperties(supabase: any, connection: any, token: string) {
           pms_property_data: prop,
           last_synced_at: new Date().toISOString(),
         });
+      }
+
+      if (stayloopPropertyId) {
+        try {
+          await syncOwnerRezPricingAndCalendar(
+            supabase,
+            connection,
+            token,
+            pmsPropertyId,
+            stayloopPropertyId
+          );
+        } catch (pricingError) {
+          console.error(`Pricing sync failed for property ${pmsPropertyId}:`, pricingError);
+        }
       }
 
       succeeded++;
@@ -564,7 +839,6 @@ async function syncAvailability(supabase: any, connection: any, token: string, p
     throw new Error('Property ID required for availability sync');
   }
 
-  const calendar = await fetchOwnerRezJson(connection, token, `/properties/${propertyId}/calendar`);
   const { data: mapping } = await supabase
     .from('pms_property_mappings')
     .select('id, stayloop_property_id')
@@ -576,47 +850,146 @@ async function syncAvailability(supabase: any, connection: any, token: string, p
     throw new Error('Property mapping not found');
   }
 
+  return syncOwnerRezPricingAndCalendar(
+    supabase,
+    connection,
+    token,
+    propertyId,
+    mapping.stayloop_property_id
+  );
+}
+
+function syncSettingsEnabled(connection: Record<string, unknown>, key: string): boolean {
+  const settings = connection.sync_settings as Record<string, unknown> | null;
+  if (!settings) return true;
+  if (settings.auto_sync === false) return false;
+  if (settings[key] === false) return false;
+  return true;
+}
+
+async function syncAllFromOwnerRez(supabase: any, connection: any, token: string) {
+  if (!syncSettingsEnabled(connection, 'availability') && !syncSettingsEnabled(connection, 'bookings')) {
+    return { processed: 0, succeeded: 0, failed: 0, skipped: true };
+  }
+
+  const { data: mappings, error } = await supabase
+    .from('pms_property_mappings')
+    .select('pms_property_id, stayloop_property_id, auto_sync_enabled')
+    .eq('pms_connection_id', connection.id);
+
+  if (error) throw error;
+
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
+  const calendarResults: Array<Record<string, unknown>> = [];
 
-  const days = Array.isArray(calendar.days) ? calendar.days : [];
-  for (const day of days) {
-    processed++;
-    try {
-      await supabase.from('availability_calendar').upsert(
-        {
-          property_id: mapping.stayloop_property_id,
-          date: day.date,
-          is_available: day.available,
-          price_override: day.rate,
-        },
-        { onConflict: 'property_id,date' }
-      );
-      succeeded++;
-    } catch (error) {
-      console.error(`Failed to sync availability for ${day.date}:`, error);
-      failed++;
+  if (syncSettingsEnabled(connection, 'availability')) {
+    for (const mapping of mappings || []) {
+      if (mapping.auto_sync_enabled === false) continue;
+      processed++;
+      try {
+        const result = await syncOwnerRezPricingAndCalendar(
+          supabase,
+          connection,
+          token,
+          String(mapping.pms_property_id),
+          mapping.stayloop_property_id
+        );
+        calendarResults.push(result);
+        succeeded++;
+      } catch (error) {
+        console.error(`Calendar sync failed for ${mapping.pms_property_id}:`, error);
+        failed++;
+      }
     }
   }
 
-  return { processed, succeeded, failed };
-}
-
-async function handleWebhook(supabase: any, connection: any, webhookData: any) {
-  await supabase.from('pms_webhook_events').insert({
-    pms_connection_id: connection.id,
-    event_type: webhookData.event,
-    event_data: webhookData,
-  });
-
-  switch (webhookData.event) {
-    case 'booking.created':
-    case 'booking.updated':
-      break;
-    case 'property.updated':
-      break;
+  let bookingResult = { processed: 0, succeeded: 0, failed: 0 };
+  if (syncSettingsEnabled(connection, 'bookings')) {
+    bookingResult = await syncBookings(supabase, connection, token);
   }
 
-  return { processed: 1, succeeded: 1, failed: 0 };
+  await supabase
+    .from('pms_connections')
+    .update({
+      last_sync_at: new Date().toISOString(),
+      sync_status: failed > 0 && succeeded === 0 ? 'failed' : 'completed',
+      sync_error: null,
+    })
+    .eq('id', connection.id);
+
+  return {
+    processed,
+    succeeded,
+    failed,
+    calendars: calendarResults,
+    bookings: bookingResult,
+  };
+}
+
+async function handleWebhook(
+  supabase: any,
+  connection: any,
+  token: string,
+  webhookData: any
+) {
+  const eventType = String(webhookData?.event || webhookData?.type || 'unknown').toLowerCase();
+
+  const { data: eventRow } = await supabase
+    .from('pms_webhook_events')
+    .insert({
+      pms_connection_id: connection.id,
+      event_type: eventType,
+      event_data: webhookData,
+      processed: false,
+    })
+    .select('id')
+    .single();
+
+  let result: Record<string, unknown> = { processed: 0, succeeded: 0, failed: 0 };
+
+  try {
+    if (eventType.includes('booking') || eventType.includes('reservation')) {
+      if (syncSettingsEnabled(connection, 'bookings')) {
+        result = await syncBookings(supabase, connection, token);
+      }
+    } else if (
+      eventType.includes('property') ||
+      eventType.includes('rate') ||
+      eventType.includes('calendar') ||
+      eventType.includes('availability')
+    ) {
+      const propertyId = webhookData?.property_id ?? webhookData?.propertyId;
+      if (propertyId && syncSettingsEnabled(connection, 'availability')) {
+        result = await syncAvailability(supabase, connection, token, String(propertyId));
+      } else if (syncSettingsEnabled(connection, 'availability')) {
+        result = await syncAllFromOwnerRez(supabase, connection, token);
+      }
+    } else {
+      result = await syncAllFromOwnerRez(supabase, connection, token);
+    }
+
+    if (eventRow?.id) {
+      await supabase
+        .from('pms_webhook_events')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('id', eventRow.id);
+    }
+  } catch (error) {
+    if (eventRow?.id) {
+      await supabase
+        .from('pms_webhook_events')
+        .update({
+          processed: false,
+          error_details: {
+            message: error instanceof Error ? error.message : 'Webhook processing failed',
+          },
+        })
+        .eq('id', eventRow.id);
+    }
+    throw error;
+  }
+
+  return result;
 }

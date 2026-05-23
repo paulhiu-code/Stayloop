@@ -3,6 +3,7 @@ import { Loader2, Minus, Plus } from 'lucide-react';
 import type { Property } from '../lib/supabase';
 import {
   calculateQuote,
+  effectiveDisplayNightlyRate,
   eachNight,
   fetchCalendarDays,
   fetchHostStripeAccountId,
@@ -71,6 +72,11 @@ export default function BookingWidget({
   }, [property.id, rangeStart, rangeEnd]);
 
   const unavailableDates = useMemo(() => buildUnavailableSet(calendarDays), [calendarDays]);
+
+  const displayNightlyRate = useMemo(
+    () => effectiveDisplayNightlyRate(property, calendarDays),
+    [property, calendarDays]
+  );
 
   const quote = useMemo(() => {
     if (!checkIn || !checkOut) return null;
@@ -163,7 +169,7 @@ export default function BookingWidget({
   return (
     <div className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-xl">
       <div className="mb-4 flex items-baseline gap-2">
-        <span className="text-3xl font-extrabold text-gray-900">${property.base_price}</span>
+        <span className="text-3xl font-extrabold text-gray-900">${displayNightlyRate}</span>
         <span className="text-sm font-medium text-gray-500">/ night</span>
       </div>
 
@@ -224,7 +230,7 @@ export default function BookingWidget({
         <div className="mt-5 space-y-2 border-t border-gray-200 pt-5 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-600">
-              ${property.base_price} x {quote.nights} night{quote.nights === 1 ? '' : 's'}
+              ${displayNightlyRate} x {quote.nights} night{quote.nights === 1 ? '' : 's'}
             </span>
             <span className="font-semibold text-gray-900">${quote.subtotal.toFixed(2)}</span>
           </div>

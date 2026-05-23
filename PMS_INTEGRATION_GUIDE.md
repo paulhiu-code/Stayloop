@@ -102,8 +102,22 @@ This creates:
 5. **Deploy Supabase Edge Functions**
    - `pms-ownerrez-sync`
    - `pms-webhook-receiver`
+   - `pms-scheduled-sync`
 
-6. **Test the first sync**
+6. **Enable automatic sync (recommended)**
+   - In StayLoop Host Dashboard → PMS, turn **Auto-sync ON** for your OwnerRez connection.
+   - Copy the **Webhook URL** shown for your connection and add it in OwnerRez (Settings → Developer/API → Webhooks).
+   - Subscribe to booking and property/calendar events when OwnerRez offers them.
+   - In Supabase → **Edge Functions → Secrets**, add:
+     - `PMS_CRON_SECRET` = a long random string you generate
+   - In Supabase → **Integrations → Cron** (or Database → Cron Jobs), create a job that runs every 6 hours:
+     - **Method:** POST
+     - **URL:** `https://YOUR_PROJECT_REF.supabase.co/functions/v1/pms-scheduled-sync`
+     - **Headers:** `x-stayloop-cron-secret: YOUR_PMS_CRON_SECRET`
+     - **Body:** `{}`
+   - This keeps all mapped properties' calendars and bookings aligned without manual clicks.
+
+7. **Test the first sync**
    - Confirm your OwnerRez properties appear in StayLoop
    - Confirm each OwnerRez property has a row in `pms_property_mappings`
    - Confirm sync status and logs appear in `pms_sync_logs`
@@ -138,7 +152,7 @@ This creates:
 ### 1. `pms-ownerrez-sync`
 Handles all OwnerRez synchronization:
 - Endpoint: `/functions/v1/pms-ownerrez-sync`
-- Actions: `sync_properties`, `sync_bookings`, `sync_availability`, `webhook`
+- Actions: `sync_properties`, `sync_bookings`, `sync_availability`, `sync_all`, `webhook`
 
 **Example Request:**
 ```json
@@ -168,6 +182,12 @@ Receives webhooks from PMS providers:
 - Validates connection and stores event
 - Triggers appropriate sync function
 
+### 4. `pms-scheduled-sync`
+Runs scheduled OwnerRez sync for connections with auto-sync enabled:
+- Endpoint: `/functions/v1/pms-scheduled-sync`
+- Auth: header `x-stayloop-cron-secret` must match `PMS_CRON_SECRET`
+- Calls `pms-ownerrez-sync` with `sync_all` (calendars, pricing, bookings)
+
 ### Edge Function secrets
 
 Set these Supabase Edge Function secrets before syncing:
@@ -175,6 +195,7 @@ Set these Supabase Edge Function secrets before syncing:
 - `STAYLOOP_SUPABASE_URL`
 - `STAYLOOP_SUPABASE_ANON_KEY`
 - `STAYLOOP_SUPABASE_SERVICE_ROLE_KEY`
+- `PMS_CRON_SECRET` (or `STAYLOOP_PMS_CRON_SECRET`) — for scheduled sync
 
 ---
 

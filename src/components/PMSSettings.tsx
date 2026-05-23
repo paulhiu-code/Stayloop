@@ -1,12 +1,26 @@
 import { useState, useEffect } from 'react';
-import { RefreshCw, Plus, Settings, ExternalLink, CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react';
+import {
+  RefreshCw,
+  Plus,
+  Settings,
+  ExternalLink,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Trash2,
+  Copy,
+} from 'lucide-react';
 import {
   pmsProviders,
   createPMSConnection,
   getPMSConnections,
   syncPMSProperties,
   syncPMSBookings,
+  syncAllPMS,
   syncAllPMSAvailability,
+  getPMSWebhookUrl,
+  isPMSAutoSyncEnabled,
+  setPMSAutoSync,
   getSyncLogs,
   deletePMSConnection,
   togglePMSConnection,
@@ -47,23 +61,54 @@ export default function PMSSettings() {
     }
   };
 
-  const handleSync = async (connectionId: string, type: 'properties' | 'bookings' | 'availability') => {
+  const handleSync = async (
+    connectionId: string,
+    type: 'properties' | 'bookings' | 'availability' | 'all'
+  ) => {
     setSyncing(connectionId);
     try {
       if (type === 'properties') {
         await syncPMSProperties(connectionId);
       } else if (type === 'bookings') {
         await syncPMSBookings(connectionId);
-      } else {
+      } else if (type === 'availability') {
         const result = await syncAllPMSAvailability(connectionId);
         alert(`Calendar sync finished: ${result.succeeded}/${result.processed} properties updated.`);
+      } else {
+        await syncAllPMS(connectionId);
+        alert('Full sync finished (calendars, pricing, and bookings).');
       }
       await loadConnections();
     } catch (error) {
       console.error('Sync failed:', error);
-      alert('Sync failed. Please try again.');
+      alert(error instanceof Error ? error.message : 'Sync failed. Please try again.');
     } finally {
       setSyncing(null);
+    }
+  };
+
+  const handleAutoSyncToggle = async (connection: PMSConnection) => {
+    const next = !isPMSAutoSyncEnabled(connection);
+    try {
+      await setPMSAutoSync(connection.id, next);
+      await loadConnections();
+    } catch (error) {
+      console.error('Auto-sync toggle failed:', error);
+      alert('Could not update automatic sync. Please try again.');
+    }
+  };
+
+  const copyWebhookUrl = async (connection: PMSConnection) => {
+    const url = getPMSWebhookUrl(connection.id, connection.pms_provider);
+    if (!url) {
+      alert('Webhook URL is unavailable. Check VITE_SUPABASE_URL in your deployment.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('Webhook URL copied. Paste it in OwnerRez → Settings → Webhooks.');
+    } catch {
+      prompt('Copy this webhook URL into OwnerRez:', url);
     }
   };
 
@@ -345,7 +390,62 @@ export default function PMSSettings() {
                   </div>
                 </div>
 
-                <div className="flex gap-3 mb-6">
+                <div className="mb-6 rounded-2xl border border-orange-100 bg-orange-50/50 p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h4 className="text-lg font-bold text-gray-900">Automatic sync</h4>
+                      <p className="mt-1 text-sm text-gray-600">
+                        When enabled, StayLoop runs scheduled syncs and processes OwnerRez webhooks for this
+                        connection.
+                      </p>
+                    </div>
+                    <label className="inline-flex cursor-pointer items-center gap-3">
+                      <span className="text-sm font-semibold text-gray-700">
+                        {isPMSAutoSyncEnabled(connection) ? 'On' : 'Off'}
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isPMSAutoSyncEnabled(connection)}
+                        onClick={() => handleAutoSyncToggle(connection)}
+                        disabled={!connection.is_active}
+                        className={`relative h-8 w-14 rounded-full transition ${
+                          isPMSAutoSyncEnabled(connection) ? 'bg-orange-500' : 'bg-gray-300'
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
+                      >
+                        <span
+                          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition ${
+                            isPMSAutoSyncEnabled(connection) ? 'left-7' : 'left-1'
+                          }`}
+                        />
+                      </button>
+                    </label>
+                  </div>
+
+                  {connection.pms_provider === 'ownerrez' && (
+                    <div className="mt-4 border-t border-orange-100 pt-4">
+                      <p className="text-sm font-semibold text-gray-800">OwnerRez webhook URL</p>
+                      <p className="mt-1 text-xs text-gray-600">
+                        Add this URL in OwnerRez so booking and calendar changes sync without clicking Sync.
+                      </p>
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <code className="flex-1 truncate rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700">
+                          {getPMSWebhookUrl(connection.id, connection.pms_provider) || 'Configure VITE_SUPABASE_URL'}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => copyWebhookUrl(connection)}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                        >
+                          <Copy className="h-4 w-4" />
+                          Copy URL
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mb-6 flex flex-wrap gap-3">
                   <button
                     onClick={() => handleSync(connection.id, 'properties')}
                     disabled={syncing === connection.id || !connection.is_active}
@@ -373,6 +473,14 @@ export default function PMSSettings() {
                   >
                     <RefreshCw className="w-5 h-5" />
                     Sync Calendars
+                  </button>
+                  <button
+                    onClick={() => handleSync(connection.id, 'all')}
+                    disabled={syncing === connection.id || !connection.is_active}
+                    className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-rose-200 text-rose-700 font-bold rounded-xl hover:bg-rose-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                    Sync All
                   </button>
                 </div>
 
