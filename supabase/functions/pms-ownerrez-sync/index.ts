@@ -303,32 +303,12 @@ function expandBlockedDates(ranges: Record<string, unknown>[]): Set<string> {
   return blocked;
 }
 
-function extractAvailabilityRecords(payload: unknown): Record<string, unknown>[] {
-  if (Array.isArray(payload)) {
-    return payload as Record<string, unknown>[];
-  }
-  if (payload && typeof payload === 'object') {
-    const record = payload as Record<string, unknown>;
-    for (const key of ['items', 'bookings', 'availability', 'results']) {
-      const value = record[key];
-      if (Array.isArray(value)) {
-        return value as Record<string, unknown>[];
-      }
-    }
-  }
-  return [];
-}
 
-async function fetchBlockedDatesFromV1Availability(
-  connection: Record<string, unknown>,
-  token: string,
-  propertyId: string
-): Promise<Set<string>> {
-  const today = formatDateOnly(new Date());
-  const end = formatDateOnly(addDays(new Date(), PRICING_SYNC_DAYS));
-  const path = `/listings/${propertyId}/availability?start=${today}&end=${end}`;
-  const payload = await fetchOwnerRezV1Json(connection, token, path);
-  return expandBlockedDates(extractAvailabilityRecords(payload));
+function bookingBelongsToProperty(booking: Record<string, unknown>, propertyId: string): boolean {
+  const bookingPropertyId = String(
+    booking.property_id ?? booking.propertyId ?? booking.listing_id ?? booking.listingId ?? ''
+  );
+  return bookingPropertyId === propertyId;
 }
 
 async function fetchBlockedDatesFromV2Bookings(
@@ -339,11 +319,13 @@ async function fetchBlockedDatesFromV2Bookings(
   const bookings = await fetchAllOwnerRezItems(
     connection,
     token,
-    `/bookings?property_ids=${propertyId}&status=active`
+    `/bookings?property_ids=${propertyId}&status=active&include_blocks=true`
   );
 
   const blocked = new Set<string>();
   for (const booking of bookings) {
+    if (!bookingBelongsToProperty(booking, propertyId)) continue;
+
     const status = String(booking.status ?? '').toLowerCase();
     if (status === 'canceled' || status === 'cancelled') continue;
 
@@ -364,25 +346,12 @@ async function fetchBlockedDates(
   token: string,
   propertyId: string
 ): Promise<Set<string>> {
-  const blocked = new Set<string>();
-
   try {
-    for (const date of await fetchBlockedDatesFromV1Availability(connection, token, propertyId)) {
-      blocked.add(date);
-    }
+    return await fetchBlockedDatesFromV2Bookings(connection, token, propertyId);
   } catch (error) {
-    console.error(`OwnerRez v1 availability fetch failed for ${propertyId}:`, error);
+    console.error(`OwnerRez bookings fetch failed for ${propertyId}:`, error);
+    return new Set();
   }
-
-  try {
-    for (const date of await fetchBlockedDatesFromV2Bookings(connection, token, propertyId)) {
-      blocked.add(date);
-    }
-  } catch (error) {
-    console.error(`OwnerRez v2 bookings fetch failed for ${propertyId}:`, error);
-  }
-
-  return blocked;
 }
 
 async function fetchCleaningFeeFromQuote(
@@ -448,7 +417,7 @@ async function syncOwnerRezPricingAndCalendar(
   for (const night of pricingNights) {
     processed++;
     try {
-      const unavailable = night.isStayDisallowed || blockedDates.has(night.date);
+      const unavailable = Boolean(night.isStayDisallowed) || blockedDates.has(night.date);
       await supabase.from('availability_calendar').upsert(
         {
           property_id: stayloopPropertyId,
@@ -468,23 +437,26 @@ async function syncOwnerRezPricingAndCalendar(
     }
   }
 
+  const pricingDates = new Set(pricingNights.map((night) => night.date));
   for (const date of blockedDates) {
-    processed++;
-    try {
-      await supabase.from('availability_calendar').upsert(
-        {
-          property_id: stayloopPropertyId,
-          date,
-          is_available: false,
-          source: 'ownerrez',
-          synced_at: syncedAt,
-        },
-        { onConflict: 'property_id,date' }
-      );
-      succeeded++;
-    } catch (error) {
-      console.error(`Failed to sync blocked date ${date}:`, error);
-      failed++;
+    if (!pricingDates.has(date)) {
+      processed++;
+      try {
+        await supabase.from('availability_calendar').upsert(
+          {
+            property_id: stayloopPropertyId,
+            date,
+            is_available: false,
+            source: 'ownerrez',
+            synced_at: syncedAt,
+          },
+          { onConflict: 'property_id,date' }
+        );
+        succeeded++;
+      } catch (error) {
+        console.error(`Failed to sync blocked date ${date}:`, error);
+        failed++;
+      }
     }
   }
 
