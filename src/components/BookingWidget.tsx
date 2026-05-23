@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Minus, Plus } from 'lucide-react';
 import type { Property } from '../lib/supabase';
 import {
-  addDays,
   calculateQuote,
   effectiveDisplayNightlyRate,
   eachNight,
@@ -11,7 +10,6 @@ import {
   formatDateOnly,
   isRangeAvailable,
   nightsBetween,
-  parseDateOnly,
 } from '../lib/booking';
 import BookingDatePicker from './BookingDatePicker';
 
@@ -22,27 +20,8 @@ type BookingWidgetProps = {
   onReserve: (checkoutPath: string) => void;
 };
 
-function buildUnavailableSet(
-  calendarDays: { date: string; is_available: boolean }[],
-  rangeStart: string,
-  rangeEnd: string
-) {
-  const unavailable = new Set(
-    calendarDays.filter((day) => day.is_available === false).map((day) => day.date)
-  );
-  const byDate = new Map(calendarDays.map((day) => [day.date, day]));
-
-  let cursor = parseDateOnly(rangeStart);
-  const end = parseDateOnly(rangeEnd);
-  while (cursor <= end) {
-    const date = formatDateOnly(cursor);
-    if (!byDate.has(date) || byDate.get(date)?.is_available === false) {
-      unavailable.add(date);
-    }
-    cursor = addDays(cursor, 1);
-  }
-
-  return unavailable;
+function buildUnavailableSet(calendarDays: { date: string; is_available: boolean }[]) {
+  return new Set(calendarDays.filter((day) => day.is_available === false).map((day) => day.date));
 }
 
 export default function BookingWidget({
@@ -92,10 +71,7 @@ export default function BookingWidget({
     };
   }, [property.id, rangeStart, rangeEnd]);
 
-  const unavailableDates = useMemo(
-    () => buildUnavailableSet(calendarDays, rangeStart, rangeEnd),
-    [calendarDays, rangeStart, rangeEnd]
-  );
+  const unavailableDates = useMemo(() => buildUnavailableSet(calendarDays), [calendarDays]);
 
   const displayNightlyRate = useMemo(
     () => effectiveDisplayNightlyRate(property, calendarDays),

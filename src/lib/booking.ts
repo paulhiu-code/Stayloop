@@ -128,8 +128,24 @@ export async function isRangeAvailable(
 
   for (const date of nightDates) {
     const day = calendarByDate.get(date);
-    if (!day || day.is_available === false) {
+    if (day?.is_available === false) {
       return { available: false, reason: `${date} is not available.` };
+    }
+  }
+
+  // If we have synced calendar data for this range but some nights are missing, do not allow booking.
+  if (calendar.length > 0) {
+    for (const date of nightDates) {
+      if (!calendarByDate.has(date)) {
+        return {
+          available: false,
+          reason: 'Calendar is still syncing for those dates. Run Sync Calendars in PMS, then try again.',
+        };
+      }
+      const day = calendarByDate.get(date);
+      if (day && day.is_available !== true) {
+        return { available: false, reason: `${date} is not available.` };
+      }
     }
   }
 
