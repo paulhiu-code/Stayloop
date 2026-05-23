@@ -10,6 +10,7 @@ import PartnersPage from './components/PartnersPage';
 import HostOnboarding from './components/HostOnboarding';
 import HostDashboard from './components/HostDashboard';
 import CheckoutPage from './components/CheckoutPage';
+import PropertyDetailPage from './components/PropertyDetailPage';
 import { supabase, Property } from './lib/supabase';
 import { showcaseProperties } from './data/showcase';
 
@@ -61,21 +62,30 @@ const featuredMarkets = [
   },
 ];
 
+function propertyIdFromPath(path: string): string | null {
+  const match = path.match(/^\/property\/([^/]+)/);
+  return match?.[1] || null;
+}
+
 function pageFromPath(path: string): SitePage {
   if (path === '/hosts') return 'hosts';
   if (path === '/partners') return 'partners';
   if (path === '/host-onboarding') return 'host-onboarding';
   if (path === '/host-dashboard') return 'host-dashboard';
   if (path === '/checkout') return 'checkout';
+  if (propertyIdFromPath(path)) return 'property';
   return 'home';
 }
 
-function pathFromPage(page: SitePage) {
+function pathFromPage(page: SitePage, propertyId?: string) {
   if (page === 'hosts') return '/hosts';
   if (page === 'partners') return '/partners';
   if (page === 'host-onboarding') return '/host-onboarding';
   if (page === 'host-dashboard') return '/host-dashboard';
-  if (page === 'checkout') return '/checkout';
+  if (page === 'checkout') {
+    return window.location.search ? `/checkout${window.location.search}` : '/checkout';
+  }
+  if (page === 'property' && propertyId) return `/property/${propertyId}`;
   return '/';
 }
 
@@ -87,11 +97,15 @@ function AppContent() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [propertyId, setPropertyId] = useState<string | null>(() => propertyIdFromPath(window.location.pathname));
   const marketCarouselRef = useRef<HTMLDivElement>(null);
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    const handlePopState = () => setPage(pageFromPath(window.location.pathname));
+    const handlePopState = () => {
+      setPage(pageFromPath(window.location.pathname));
+      setPropertyId(propertyIdFromPath(window.location.pathname));
+    };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -133,10 +147,24 @@ function AppContent() {
     fetchProperties(query);
   }
 
-  function navigate(nextPage: SitePage) {
-    window.history.pushState({}, '', pathFromPage(nextPage));
+  function navigate(nextPage: SitePage, options?: { propertyId?: string; path?: string }) {
+    const path = options?.path || pathFromPage(nextPage, options?.propertyId);
+    window.history.pushState({}, '', path);
     setPage(nextPage);
+    if (nextPage === 'property' && options?.propertyId) {
+      setPropertyId(options.propertyId);
+    } else if (nextPage !== 'property') {
+      setPropertyId(null);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function viewProperty(id: string) {
+    navigate('property', { propertyId: id });
+  }
+
+  function goToCheckout(path: string) {
+    navigate('checkout', { path });
   }
 
   function openAuth(mode: AuthMode = 'signin') {
@@ -185,6 +213,18 @@ function AppContent() {
     return <CheckoutPage onClose={() => navigate('home')} />;
   }
 
+  if (page === 'property' && propertyId) {
+    return (
+      <PropertyDetailPage
+        propertyId={propertyId}
+        onClose={() => navigate('home')}
+        onCheckout={goToCheckout}
+        isAuthenticated={Boolean(user)}
+        onRequireAuth={() => openAuth('signin')}
+      />
+    );
+  }
+
   if (showDashboard) {
     return <Dashboard onClose={() => setShowDashboard(false)} />;
   }
@@ -229,13 +269,13 @@ function AppContent() {
         ) : properties.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {properties.map((property) => (
-              <PropertyCard key={property.id} property={property} />
+              <PropertyCard key={property.id} property={property} onViewStay={viewProperty} />
             ))}
           </div>
         ) : !searchQuery ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {showcaseProperties.map((property) => (
-              <PropertyCard key={property.id} property={property} />
+              <PropertyCard key={property.id} property={property} onViewStay={viewProperty} />
             ))}
           </div>
         ) : (

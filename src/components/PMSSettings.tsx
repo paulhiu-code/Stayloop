@@ -6,8 +6,7 @@ import {
   getPMSConnections,
   syncPMSProperties,
   syncPMSBookings,
-  formatSyncError,
-  testOwnerRezConnection,
+  syncAllPMSAvailability,
   getSyncLogs,
   deletePMSConnection,
   togglePMSConnection,
@@ -25,7 +24,6 @@ export default function PMSSettings() {
   const [selectedProvider, setSelectedProvider] = useState<PMSProvider | null>(null);
   const [accountName, setAccountName] = useState('');
   const [accessToken, setAccessToken] = useState('');
-  const [ownerRezEmail, setOwnerRezEmail] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -49,37 +47,23 @@ export default function PMSSettings() {
     }
   };
 
-  const handleTestConnection = async (connectionId: string) => {
-    setSyncing(connectionId);
-    try {
-      alert(await testOwnerRezConnection(connectionId));
-    } catch (error) {
-      console.error('OwnerRez test failed:', error);
-      alert(formatSyncError(error));
-    } finally {
-      setSyncing(null);
-    }
-  };
-
-  const handleSync = async (connectionId: string, type: 'properties' | 'bookings') => {
+  const handleSync = async (connectionId: string, type: 'properties' | 'bookings' | 'availability') => {
     setSyncing(connectionId);
     try {
       if (type === 'properties') {
         await syncPMSProperties(connectionId);
-      } else {
+      } else if (type === 'bookings') {
         await syncPMSBookings(connectionId);
+      } else {
+        const result = await syncAllPMSAvailability(connectionId);
+        alert(`Calendar sync finished: ${result.succeeded}/${result.processed} properties updated.`);
       }
-    } catch (error) {
-      console.error('Sync failed:', error);
-      alert(formatSyncError(error));
-    } finally {
-      setSyncing(null);
-    }
-
-    try {
       await loadConnections();
     } catch (error) {
-      console.error('Failed to refresh PMS status:', error);
+      console.error('Sync failed:', error);
+      alert('Sync failed. Please try again.');
+    } finally {
+      setSyncing(null);
     }
   };
 
@@ -109,7 +93,6 @@ export default function PMSSettings() {
     setSelectedProvider(null);
     setAccountName('');
     setAccessToken('');
-    setOwnerRezEmail('');
     setRefreshToken('');
   };
 
@@ -117,21 +100,13 @@ export default function PMSSettings() {
     event.preventDefault();
     if (!selectedProvider || !accessToken.trim()) return;
 
-    if (selectedProvider === 'ownerrez' && !ownerRezEmail.trim()) {
-      alert('Enter the email address you use to log in to OwnerRez.');
-      return;
-    }
-
     setCreating(true);
     try {
       await createPMSConnection(
         selectedProvider,
         accessToken.trim(),
         refreshToken.trim() || undefined,
-        accountName.trim() || undefined,
-        selectedProvider === 'ownerrez'
-          ? { ownerrez_email: ownerRezEmail.trim().toLowerCase() }
-          : undefined
+        accountName.trim() || undefined
       );
       resetConnectionForm();
       setShowAddConnection(false);
@@ -232,9 +207,7 @@ export default function PMSSettings() {
                     Connect {pmsProviders.find(provider => provider.id === selectedProvider)?.name}
                   </h4>
                   <p className="mt-2 text-sm leading-6 text-gray-600">
-                    {selectedProvider === 'ownerrez'
-                      ? 'Use your OwnerRez Personal Access Token (starts with pt_) and the same email you use to sign in to OwnerRez.'
-                      : 'Paste your PMS API/OAuth access token to create a connection.'}
+                    Paste your PMS API/OAuth access token to create a connection. For OwnerRez, request API access in OwnerRez and use the token provided for your account.
                   </p>
                 </div>
 
@@ -249,26 +222,12 @@ export default function PMSSettings() {
                     />
                   </label>
 
-                  {selectedProvider === 'ownerrez' && (
-                    <label className="block md:col-span-2">
-                      <span className="mb-2 block text-sm font-semibold text-gray-700">OwnerRez login email</span>
-                      <input
-                        value={ownerRezEmail}
-                        onChange={(event) => setOwnerRezEmail(event.target.value)}
-                        placeholder="you@example.com"
-                        type="email"
-                        required
-                        className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                      />
-                    </label>
-                  )}
-
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-gray-700">Access token</span>
                     <input
                       value={accessToken}
                       onChange={(event) => setAccessToken(event.target.value)}
-                      placeholder={selectedProvider === 'ownerrez' ? 'pt_...' : 'Paste API/OAuth token'}
+                      placeholder="Paste API/OAuth token"
                       type="password"
                       required
                       className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
@@ -388,15 +347,6 @@ export default function PMSSettings() {
 
                 <div className="flex gap-3 mb-6">
                   <button
-                        type="button"
-                        onClick={() => handleTestConnection(connection.id)}
-                        disabled={syncing === connection.id}
-                        className="rounded-xl border border-orange-300 bg-white px-4 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Test OwnerRez
-                      </button>
-
-                  <button
                     onClick={() => handleSync(connection.id, 'properties')}
                     disabled={syncing === connection.id || !connection.is_active}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-bold rounded-xl hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
@@ -415,6 +365,14 @@ export default function PMSSettings() {
                   >
                     <RefreshCw className="w-5 h-5" />
                     Sync Bookings
+                  </button>
+                  <button
+                    onClick={() => handleSync(connection.id, 'availability')}
+                    disabled={syncing === connection.id || !connection.is_active}
+                    className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-orange-200 text-orange-700 font-bold rounded-xl hover:bg-orange-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                    Sync Calendars
                   </button>
                 </div>
 
