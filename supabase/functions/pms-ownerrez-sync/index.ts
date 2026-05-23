@@ -6,27 +6,152 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
-interface OwnerRezProperty {
-  id: string;
-  name: string;
-  address: string;
-  city: string;
-  state: string;
-  country: string;
-  bedrooms: number;
-  bathrooms: number;
-  maxGuests: number;
-  baseRate: number;
-  description: string;
-  amenities: string[];
-  photos: string[];
-}
+const OWNERREZ_API_BASE = 'https://api.ownerrez.com/v2';
 
 interface SyncRequest {
   action: 'sync_properties' | 'sync_bookings' | 'sync_availability' | 'webhook';
   pmsConnectionId: string;
   propertyId?: string;
   webhookData?: any;
+}
+
+function getOwnerRezEmail(connection: Record<string, unknown>): string | null {
+  const credentials = connection.api_credentials as Record<string, unknown> | null;
+  const email = credentials?.ownerrez_email ?? credentials?.email;
+  return typeof email === 'string' && email.includes('@') ? email : null;
+}
+
+async function ownerRezFetch(
+  connection: Record<string, unknown>,
+  token: string,
+  path: string,
+  init?: RequestInit
+): Promise<Response> {
+  const url = path.startsWith('http') ? path : `${OWNERREZ_API_BASE}${path}`;
+  const headers = new Headers(init?.headers);
+  headers.set('Content-Type', 'application/json');
+
+  const normalizedToken = token.trim();
+  if (normalizedToken.toLowerCase().startsWith('pt_')) {
+    const email = getOwnerRezEmail(connection);
+    if (!email) {
+      throw new Error(
+        'OwnerRez personal access tokens require your OwnerRez login email. Remove this connection and add it again with your email filled in.'
+      );
+    }
+    headers.set('Authorization', `Basic ${btoa(`${email}:${normalizedToken}`)}`);
+  } else {
+    headers.set('Authorization', `Bearer ${normalizedToken}`);
+    headers.set('User-Agent', 'StayLoop/1.0');
+  }
+
+  return fetch(url, { ...init, headers });
+}
+
+async function fetchOwnerRezJson(
+  connection: Record<string, unknown>,
+  token: string,
+  path: string
+): Promise<Record<string, unknown>> {
+  const response = await ownerRezFetch(connection, token, path);
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`OwnerRez API error (${response.status}): ${body || response.statusText}`);
+  }
+  return response.json();
+}
+
+async function fetchAllOwnerRezItems(
+  connection: Record<string, unknown>,
+  token: string,
+  initialPath: string
+): Promise<Record<string, unknown>[]> {
+  const items: Record<string, unknown>[] = [];
+  let path: string | null = initialPath;
+
+  while (path) {
+    const page = await fetchOwnerRezJson(connection, token, path);
+    const pageItems = Array.isArray(page) ? page : (page.items as Record<string, unknown>[]) || [];
+    items.push(...pageItems);
+
+    const nextPageUrl = page.next_page_url;
+    if (typeof nextPageUrl === 'string' && nextPageUrl.length > 0) {
+      path = nextPageUrl.replace(OWNERREZ_API_BASE, '');
+    } else {
+      path = null;
+    }
+  }
+
+  return items;
+}
+
+function mapOwnerRezProperty(prop: Record<string, unknown>, connection: Record<string, unknown>) {
+  const addr = (prop.address as Record<string, unknown>) || {};
+  const street1 = typeof addr.street1 === 'string' ? addr.street1 : '';
+  const street2 = typeof addr.street2 === 'string' ? addr.street2 : '';
+  const addressLine =
+    [street1, street2].filter(Boolean).join(', ') ||
+    (typeof addr.address === 'string' ? addr.address : 'Address on file');
+
+  const images: string[] = [];
+  for (const key of ['thumbnail_url_large', 'thumbnail_url', 'thumbnail_url_medium']) {
+    const value = prop[key];
+    if (typeof value === 'string' && value.length > 0) {
+      images.push(value);
+    }
+  }
+
+  let propertyType = typeof prop.property_type === 'string' ? prop.property_type.toLowerCase() : 'house';
+  const allowedTypes = new Set([
+    'house',
+    'apartment',
+    'condo',
+    'villa',
+    'cabin',
+    'cottage',
+    'townhouse',
+    'loft',
+    'other',
+  ]);
+  if (!allowedTypes.has(propertyType)) {
+    propertyType = 'other';
+  }
+
+  return {
+    host_id: connection.user_id,
+    title:
+      (typeof prop.name === 'string' && prop.name) ||
+      (typeof prop.external_name === 'string' && prop.external_name) ||
+      'OwnerRez Property',
+    description:
+      typeof prop.public_url === 'string'
+        ? `Imported from OwnerRez. View listing: ${prop.public_url}`
+        : 'Imported from OwnerRez.',
+    property_type: propertyType,
+    address: addressLine,
+    city: (typeof addr.city === 'string' && addr.city) || 'Unknown',
+    state:
+      (typeof addr.state === 'string' && addr.state) ||
+      (typeof addr.province === 'string' && addr.province) ||
+      '',
+    country: (typeof addr.country === 'string' && addr.country) || 'US',
+    postal_code: typeof addr.postal_code === 'string' ? addr.postal_code : null,
+    latitude: typeof prop.latitude === 'number' ? prop.latitude : null,
+    longitude: typeof prop.longitude === 'number' ? prop.longitude : null,
+    bedrooms: typeof prop.bedrooms === 'number' ? prop.bedrooms : 1,
+    bathrooms: typeof prop.bathrooms === 'number' ? prop.bathrooms : 1,
+    max_guests: typeof prop.max_guests === 'number' ? prop.max_guests : 2,
+    base_price: 0,
+    cleaning_fee: 0,
+    amenities: [],
+    images,
+    is_active: prop.active !== false,
+    pms_integration: {
+      provider: 'ownerrez',
+      property_id: String(prop.id),
+      last_synced: new Date().toISOString(),
+    },
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -58,7 +183,6 @@ Deno.serve(async (req: Request) => {
       authedUserId = userData.user.id;
     }
 
-    // Get PMS connection details
     let connectionQuery = supabase
       .from('pms_connections')
       .select('*')
@@ -79,9 +203,7 @@ Deno.serve(async (req: Request) => {
     if (!ownerRezToken) {
       throw new Error('OwnerRez access token is missing');
     }
-    const baseUrl = 'https://api.ownerreservations.com/v2';
 
-    // Create sync log
     const { data: syncLog } = await supabase
       .from('pms_sync_logs')
       .insert({
@@ -97,13 +219,13 @@ Deno.serve(async (req: Request) => {
 
     switch (action) {
       case 'sync_properties':
-        result = await syncProperties(supabase, connection, baseUrl, ownerRezToken);
+        result = await syncProperties(supabase, connection, ownerRezToken);
         break;
       case 'sync_bookings':
-        result = await syncBookings(supabase, connection, baseUrl, ownerRezToken, propertyId);
+        result = await syncBookings(supabase, connection, ownerRezToken, propertyId);
         break;
       case 'sync_availability':
-        result = await syncAvailability(supabase, connection, baseUrl, ownerRezToken, propertyId);
+        result = await syncAvailability(supabase, connection, ownerRezToken, propertyId);
         break;
       case 'webhook':
         result = await handleWebhook(supabase, connection, webhookData);
@@ -112,7 +234,6 @@ Deno.serve(async (req: Request) => {
         throw new Error('Invalid action');
     }
 
-    // Update sync log
     await supabase
       .from('pms_sync_logs')
       .update({
@@ -124,7 +245,6 @@ Deno.serve(async (req: Request) => {
       })
       .eq('id', syncLog.id);
 
-    // Update connection last sync
     await supabase
       .from('pms_connections')
       .update({
@@ -138,26 +258,20 @@ Deno.serve(async (req: Request) => {
     });
   } catch (error) {
     console.error('OwnerRez sync error:', error);
+    const message = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
 
-async function syncProperties(supabase: any, connection: any, baseUrl: string, token: string) {
-  const response = await fetch(`${baseUrl}/properties`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`OwnerRez API error: ${response.statusText}`);
-  }
-
-  const properties = await response.json();
+async function syncProperties(supabase: any, connection: any, token: string) {
+  const properties = await fetchAllOwnerRezItems(
+    connection,
+    token,
+    '/properties?active=true&include_fields=true'
+  );
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
@@ -165,43 +279,18 @@ async function syncProperties(supabase: any, connection: any, baseUrl: string, t
   for (const prop of properties) {
     processed++;
     try {
-      // Check if mapping exists
+      const pmsPropertyId = String(prop.id);
       const { data: mapping } = await supabase
         .from('pms_property_mappings')
         .select('id, stayloop_property_id')
         .eq('pms_connection_id', connection.id)
-        .eq('pms_property_id', prop.id)
+        .eq('pms_property_id', pmsPropertyId)
         .maybeSingle();
 
-      const propertyData = {
-        host_id: connection.user_id,
-        title: prop.name,
-        description: prop.description || '',
-        property_type: 'house',
-        address: prop.address || '',
-        city: prop.city || '',
-        state: prop.state || '',
-        country: prop.country || 'US',
-        bedrooms: prop.bedrooms || 1,
-        bathrooms: prop.bathrooms || 1,
-        max_guests: prop.maxGuests || 2,
-        base_price: prop.baseRate || 0,
-        cleaning_fee: 0,
-        amenities: prop.amenities || [],
-        images: prop.photos || [],
-        pms_integration: {
-          provider: 'ownerrez',
-          property_id: prop.id,
-          last_synced: new Date().toISOString(),
-        },
-      };
+      const propertyData = mapOwnerRezProperty(prop, connection);
 
       if (mapping) {
-        // Update existing property
-        await supabase
-          .from('properties')
-          .update(propertyData)
-          .eq('id', mapping.stayloop_property_id);
+        await supabase.from('properties').update(propertyData).eq('id', mapping.stayloop_property_id);
 
         await supabase
           .from('pms_property_mappings')
@@ -211,28 +300,28 @@ async function syncProperties(supabase: any, connection: any, baseUrl: string, t
           })
           .eq('id', mapping.id);
       } else {
-        // Create new property
-        const { data: newProperty } = await supabase
+        const { data: newProperty, error: insertError } = await supabase
           .from('properties')
           .insert(propertyData)
           .select()
           .single();
 
-        // Create mapping
-        await supabase
-          .from('pms_property_mappings')
-          .insert({
-            pms_connection_id: connection.id,
-            stayloop_property_id: newProperty.id,
-            pms_property_id: prop.id,
-            pms_property_data: prop,
-            last_synced_at: new Date().toISOString(),
-          });
+        if (insertError || !newProperty) {
+          throw insertError || new Error('Failed to create StayLoop property');
+        }
+
+        await supabase.from('pms_property_mappings').insert({
+          pms_connection_id: connection.id,
+          stayloop_property_id: newProperty.id,
+          pms_property_id: pmsPropertyId,
+          pms_property_data: prop,
+          last_synced_at: new Date().toISOString(),
+        });
       }
 
       succeeded++;
     } catch (error) {
-      console.error(`Failed to sync property ${prop.id}:`, error);
+      console.error(`Failed to sync property ${String(prop.id)}:`, error);
       failed++;
     }
   }
@@ -240,23 +329,9 @@ async function syncProperties(supabase: any, connection: any, baseUrl: string, t
   return { processed, succeeded, failed };
 }
 
-async function syncBookings(supabase: any, connection: any, baseUrl: string, token: string, propertyId?: string) {
-  const url = propertyId
-    ? `${baseUrl}/properties/${propertyId}/bookings`
-    : `${baseUrl}/bookings`;
-
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`OwnerRez API error: ${response.statusText}`);
-  }
-
-  const bookings = await response.json();
+async function syncBookings(supabase: any, connection: any, token: string, propertyId?: string) {
+  const path = propertyId ? `/properties/${propertyId}/bookings` : '/bookings';
+  const bookings = await fetchAllOwnerRezItems(connection, token, path);
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
@@ -264,40 +339,37 @@ async function syncBookings(supabase: any, connection: any, baseUrl: string, tok
   for (const booking of bookings) {
     processed++;
     try {
-      // Get property mapping
+      const bookingPropertyId = String(booking.property_id ?? booking.propertyId ?? '');
       const { data: mapping } = await supabase
         .from('pms_property_mappings')
         .select('id, stayloop_property_id')
         .eq('pms_connection_id', connection.id)
-        .eq('pms_property_id', booking.propertyId)
+        .eq('pms_property_id', bookingPropertyId)
         .maybeSingle();
 
       if (!mapping) {
-        console.log(`Property mapping not found for booking ${booking.id}`);
         failed++;
         continue;
       }
 
-      // Get property to get host_id
       const { data: property } = await supabase
         .from('properties')
         .select('host_id')
         .eq('id', mapping.stayloop_property_id)
         .single();
 
-      // Check if booking already exists
       const { data: existingBooking } = await supabase
         .from('bookings')
         .select('id')
         .eq('property_id', mapping.stayloop_property_id)
-        .eq('payment_intent_id', booking.id)
+        .eq('payment_intent_id', String(booking.id))
         .maybeSingle();
 
       if (!existingBooking) {
         const total = Number(booking.total || 0);
-        const cleaningFee = Number(booking.cleaningFee || 0);
+        const cleaningFee = Number(booking.cleaning_fee ?? booking.cleaningFee ?? 0);
         const guestServiceFee = Number((total * 0.05).toFixed(2));
-        const hostServiceFee = Number((total * 0.10).toFixed(2));
+        const hostServiceFee = Number((total * 0.1).toFixed(2));
 
         await supabase.from('bookings').insert({
           property_id: mapping.stayloop_property_id,
@@ -314,13 +386,13 @@ async function syncBookings(supabase: any, connection: any, baseUrl: string, tok
           total_amount: total + guestServiceFee,
           host_payout: total - hostServiceFee,
           status: booking.status === 'confirmed' ? 'confirmed' : 'pending',
-          payment_intent_id: booking.id,
+          payment_intent_id: String(booking.id),
         });
       }
 
       succeeded++;
     } catch (error) {
-      console.error(`Failed to sync booking ${booking.id}:`, error);
+      console.error(`Failed to sync booking ${String(booking.id)}:`, error);
       failed++;
     }
   }
@@ -328,25 +400,12 @@ async function syncBookings(supabase: any, connection: any, baseUrl: string, tok
   return { processed, succeeded, failed };
 }
 
-async function syncAvailability(supabase: any, connection: any, baseUrl: string, token: string, propertyId?: string) {
+async function syncAvailability(supabase: any, connection: any, token: string, propertyId?: string) {
   if (!propertyId) {
     throw new Error('Property ID required for availability sync');
   }
 
-  const response = await fetch(`${baseUrl}/properties/${propertyId}/calendar`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`OwnerRez API error: ${response.statusText}`);
-  }
-
-  const calendar = await response.json();
-
-  // Get property mapping
+  const calendar = await fetchOwnerRezJson(connection, token, `/properties/${propertyId}/calendar`);
   const { data: mapping } = await supabase
     .from('pms_property_mappings')
     .select('id, stayloop_property_id')
@@ -362,19 +421,19 @@ async function syncAvailability(supabase: any, connection: any, baseUrl: string,
   let succeeded = 0;
   let failed = 0;
 
-  for (const day of calendar.days) {
+  const days = Array.isArray(calendar.days) ? calendar.days : [];
+  for (const day of days) {
     processed++;
     try {
-      await supabase
-        .from('availability_calendar')
-        .upsert({
+      await supabase.from('availability_calendar').upsert(
+        {
           property_id: mapping.stayloop_property_id,
           date: day.date,
           is_available: day.available,
           price_override: day.rate,
-        }, {
-          onConflict: 'property_id,date',
-        });
+        },
+        { onConflict: 'property_id,date' }
+      );
       succeeded++;
     } catch (error) {
       console.error(`Failed to sync availability for ${day.date}:`, error);
@@ -386,21 +445,17 @@ async function syncAvailability(supabase: any, connection: any, baseUrl: string,
 }
 
 async function handleWebhook(supabase: any, connection: any, webhookData: any) {
-  // Log webhook event
   await supabase.from('pms_webhook_events').insert({
     pms_connection_id: connection.id,
     event_type: webhookData.event,
     event_data: webhookData,
   });
 
-  // Process based on event type
   switch (webhookData.event) {
     case 'booking.created':
     case 'booking.updated':
-      // Trigger booking sync
       break;
     case 'property.updated':
-      // Trigger property sync
       break;
   }
 

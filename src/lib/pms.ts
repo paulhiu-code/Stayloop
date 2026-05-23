@@ -124,6 +124,12 @@ export async function syncPMSProperties(connectionId: string): Promise<unknown> 
   });
 
   if (error) throw error;
+
+  const result = data as { success?: boolean; error?: string } | null;
+  if (result?.success === false) {
+    throw new Error(result.error || 'Property sync failed.');
+  }
+
   return data;
 }
 
