@@ -128,7 +128,7 @@ export async function isRangeAvailable(
 
   for (const date of nightDates) {
     const day = calendarByDate.get(date);
-    if (day && day.is_available === false) {
+    if (!day || day.is_available === false) {
       return { available: false, reason: `${date} is not available.` };
     }
   }
