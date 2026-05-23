@@ -511,7 +511,9 @@ Deno.serve(async (req: Request) => {
 
     const cronSecret = Deno.env.get('PMS_CRON_SECRET') || Deno.env.get('STAYLOOP_PMS_CRON_SECRET');
     const providedCronSecret = req.headers.get('x-stayloop-cron-secret') || '';
-    const isCronJob = action === 'sync_all' && cronSecret && providedCronSecret === cronSecret;
+    const cronActions = new Set(['sync_all', 'sync_availability', 'sync_bookings']);
+    const isCronJob =
+      cronActions.has(action) && Boolean(cronSecret && providedCronSecret === cronSecret);
 
     let authedUserId: string | null = null;
     if (action !== 'webhook' && !isCronJob) {
