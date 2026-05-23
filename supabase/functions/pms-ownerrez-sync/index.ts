@@ -15,6 +15,24 @@ interface SyncRequest {
   webhookData?: any;
 }
 
+
+function syncTypeFromAction(action: string): string {
+  switch (action) {
+    case 'sync_properties':
+      return 'property';
+    case 'sync_bookings':
+      return 'booking';
+    case 'sync_availability':
+      return 'availability';
+    case 'webhook':
+      return 'webhook';
+    case 'test_ownerrez':
+      return 'property';
+    default:
+      return 'property';
+  }
+}
+
 function getOwnerRezEmail(connection: Record<string, unknown>): string | null {
   const credentials = connection.api_credentials as Record<string, unknown> | null;
   const email = credentials?.ownerrez_email ?? credentials?.email;
@@ -298,16 +316,25 @@ Deno.serve(async (req: Request) => {
         .eq('id', connection.id);
     }
 
-    const { data: syncLog } = await supabase
-      .from('pms_sync_logs')
-      .insert({
-        pms_connection_id: pmsConnectionId,
-        sync_type: action.replace('sync_', ''),
-        sync_direction: 'from_pms',
-        status: 'started',
-      })
-      .select()
-      .single();
+    let syncLogId: string | null = null;
+    if (action !== 'test_ownerrez') {
+      const { data: syncLog, error: syncLogError } = await supabase
+        .from('pms_sync_logs')
+        .insert({
+          pms_connection_id: pmsConnectionId,
+          sync_type: syncTypeFromAction(action),
+          sync_direction: 'from_pms',
+          status: 'started',
+        })
+        .select()
+        .single();
+
+      if (syncLogError || !syncLog) {
+        throw new Error(`Failed to create sync log: ${syncLogError?.message || 'unknown error'}`);
+      }
+
+      syncLogId = syncLog.id;
+    }
 
     let result;
 
@@ -342,16 +369,18 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    await supabase
-      .from('pms_sync_logs')
-      .update({
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        records_processed: result.processed || 0,
-        records_succeeded: result.succeeded || 0,
-        records_failed: result.failed || 0,
-      })
-      .eq('id', syncLog.id);
+    if (syncLogId) {
+      await supabase
+        .from('pms_sync_logs')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          records_processed: result.processed || 0,
+          records_succeeded: result.succeeded || 0,
+          records_failed: result.failed || 0,
+        })
+        .eq('id', syncLogId);
+    }
 
     await supabase
       .from('pms_connections')
