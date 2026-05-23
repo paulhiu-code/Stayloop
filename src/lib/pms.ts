@@ -1,31 +1,5 @@
 import { supabase } from './supabase';
 
-export function formatSyncError(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-  if (typeof error === 'string' && error.trim()) {
-    return error;
-  }
-  if (error && typeof error === 'object') {
-    const record = error as Record<string, unknown>;
-    for (const key of ['message', 'error', 'details', 'hint']) {
-      const value = record[key];
-      if (typeof value === 'string' && value.trim()) {
-        return value;
-      }
-    }
-    try {
-      return JSON.stringify(error).slice(0, 600);
-    } catch {
-      return String(error);
-    }
-  }
-  return 'Unknown sync error. Hard-refresh the page (Ctrl+Shift+R), then try again.';
-}
-
-
-
 export type PMSProvider = 'ownerrez' | 'guesty';
 
 export interface PMSConnection {
@@ -74,90 +48,6 @@ export interface PMSSyncLog {
   created_at: string;
 }
 
-
-
-async function invokePMSEdgeFunction(
-  functionName: string,
-  body: Record<string, unknown>
-): Promise<Record<string, unknown> | null> {
-  const { data: session } = await supabase.auth.getSession();
-  const accessToken = session.session?.access_token;
-  if (!accessToken) {
-    throw new Error('Please sign in again, then retry sync.');
-  }
-
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\/rest\/v1\/?$/, '');
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !anonKey) {
-    throw new Error('StayLoop is missing Supabase configuration.');
-  }
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      apikey: anonKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-
-  const raw = await response.text();
-  let payload: Record<string, unknown> | null = null;
-  try {
-    payload = raw ? JSON.parse(raw) : null;
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const payloadMessage =
-      payload && typeof payload === 'object'
-        ? (typeof payload.error === 'string' && payload.error) ||
-          (typeof payload.message === 'string' && payload.message) ||
-          (typeof payload.msg === 'string' && payload.msg) ||
-          null
-        : null;
-    const detail =
-      payloadMessage ||
-      (raw?.trim() ? raw.slice(0, 500) : '') ||
-      `Sync failed (HTTP ${response.status}). Check Supabase Edge Function logs for pms-ownerrez-sync.`;
-    throw new Error(detail);
-  }
-
-  if (payload?.success === false && typeof payload.error === 'string') {
-    throw new Error(payload.error);
-  }
-
-  return payload;
-}
-
-async function getFunctionInvokeErrorMessage(error: unknown, data: unknown): Promise<string> {
-  if (data && typeof data === 'object') {
-    const payload = data as { success?: boolean; error?: string; message?: string };
-    if (typeof payload.error === 'string' && payload.error) return payload.error;
-    if (typeof payload.message === 'string' && payload.message) return payload.message;
-    if (payload.success === false) return payload.error || 'Property sync failed.';
-  }
-
-  if (error && typeof error === 'object' && 'context' in error) {
-    const context = (error as { context?: Response }).context;
-    if (context) {
-      try {
-        const body = await context.json();
-        if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
-          return body.error;
-        }
-      } catch {
-        // ignore parse errors
-      }
-    }
-  }
-
-  if (error instanceof Error && error.message) return error.message;
-  return 'Sync failed. Please try again.';
-}
-
 export const pmsProviders = [
   {
     id: 'ownerrez' as const,
@@ -181,8 +71,7 @@ export async function createPMSConnection(
   provider: PMSProvider,
   accessToken: string,
   refreshToken?: string,
-  accountName?: string,
-  apiCredentials?: Record<string, unknown>
+  accountName?: string
 ): Promise<PMSConnection> {
   const { data: session } = await supabase.auth.getSession();
   if (!session.session) throw new Error('Not authenticated');
@@ -195,7 +84,6 @@ export async function createPMSConnection(
       account_name: accountName,
       oauth_access_token: accessToken,
       oauth_refresh_token: refreshToken,
-      api_credentials: apiCredentials ?? null,
       is_active: true,
     })
     .select()
@@ -215,17 +103,6 @@ export async function getPMSConnections(): Promise<PMSConnection[]> {
   return data || [];
 }
 
-export async function testOwnerRezConnection(connectionId: string): Promise<string> {
-  const payload = await invokePMSEdgeFunction('pms-ownerrez-sync', {
-    action: 'test_ownerrez',
-    pmsConnectionId: connectionId,
-  });
-  const result = payload?.result as { propertyCount?: number; email?: string } | undefined;
-  const count = result?.propertyCount ?? 0;
-  const email = result?.email ?? 'unknown';
-  return `OwnerRez connection OK. Found ${count} active properties for ${email}.`;
-}
-
 export async function syncPMSProperties(connectionId: string): Promise<unknown> {
   const { data: connection } = await supabase
     .from('pms_connections')
@@ -239,17 +116,15 @@ export async function syncPMSProperties(connectionId: string): Promise<unknown> 
     ? 'pms-ownerrez-sync'
     : 'pms-guesty-sync';
 
-  const payload = await invokePMSEdgeFunction(functionName, {
-    action: 'sync_properties',
-    pmsConnectionId: connectionId,
+  const { data, error } = await supabase.functions.invoke(functionName, {
+    body: {
+      action: 'sync_properties',
+      pmsConnectionId: connectionId,
+    },
   });
 
-  const result = payload?.result as { succeeded?: number; processed?: number } | undefined;
-  if (result?.processed && result.succeeded === 0) {
-    throw new Error('OwnerRez properties were found but none could be saved. Check your host profile and try again.');
-  }
-
-  return payload;
+  if (error) throw error;
+  return data;
 }
 
 export async function syncPMSBookings(connectionId: string, propertyId?: string): Promise<unknown> {
@@ -275,6 +150,30 @@ export async function syncPMSBookings(connectionId: string, propertyId?: string)
 
   if (error) throw error;
   return data;
+}
+
+export async function syncAllPMSAvailability(connectionId: string): Promise<{
+  processed: number;
+  succeeded: number;
+  failed: number;
+}> {
+  const mappings = await getPropertyMappings(connectionId);
+  let processed = 0;
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const mapping of mappings) {
+    processed += 1;
+    try {
+      await syncPMSAvailability(connectionId, mapping.pms_property_id);
+      succeeded += 1;
+    } catch (error) {
+      console.error(`Availability sync failed for ${mapping.pms_property_id}:`, error);
+      failed += 1;
+    }
+  }
+
+  return { processed, succeeded, failed };
 }
 
 export async function syncPMSAvailability(connectionId: string, propertyId: string): Promise<unknown> {

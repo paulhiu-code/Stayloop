@@ -3,6 +3,7 @@ import { Elements, CardElement, useElements, useStripe } from '@stripe/react-str
 import { loadStripe } from '@stripe/stripe-js';
 import { ArrowLeft, CheckCircle, Loader2 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
+import { supabase } from '../lib/supabase';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
@@ -78,16 +79,47 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
   const [clientSecret, setClientSecret] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [propertyTitle, setPropertyTitle] = useState('');
+
+  const checkIn = params.get('checkIn');
+  const checkOut = params.get('checkOut');
+  const numGuests = params.get('numGuests');
+  const totalAmountCents = Number(params.get('totalAmountCents') || 0);
+  const propertyId = params.get('propertyId');
+  const hostStripeAccountId = params.get('hostStripeAccountId');
+
+  useEffect(() => {
+    async function loadSummary() {
+      if (!propertyId) return;
+      const { data } = await supabase.from('properties').select('title').eq('id', propertyId).maybeSingle();
+      if (data?.title) setPropertyTitle(data.title);
+    }
+
+    loadSummary();
+  }, [propertyId]);
 
   useEffect(() => {
     async function createPaymentIntent() {
+      if (!propertyId || !hostStripeAccountId || !totalAmountCents || !checkIn || !checkOut) {
+        setError('Missing booking details. Go back and choose your dates again.');
+        setLoading(false);
+        return;
+      }
+
+      if (!import.meta.env.VITE_API_BASE_URL) {
+        setError('Payments are not configured yet. Your dates are saved — checkout will work once the API is live.');
+        setLoading(false);
+        return;
+      }
+
       try {
         const payload = {
-          propertyId: params.get('propertyId'),
-          hostStripeAccountId: params.get('hostStripeAccountId'),
-          totalAmountCents: Number(params.get('totalAmountCents')),
-          checkIn: params.get('checkIn'),
-          checkOut: params.get('checkOut'),
+          propertyId,
+          hostStripeAccountId,
+          totalAmountCents,
+          checkIn,
+          checkOut,
+          numGuests: Number(numGuests || 1),
         };
 
         const response = await apiRequest<{ clientSecret: string }>('/api/bookings/create-payment-intent', {
@@ -106,6 +138,8 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
     createPaymentIntent();
   }, []);
 
+  const totalDisplay = totalAmountCents ? (totalAmountCents / 100).toFixed(2) : null;
+
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-2xl">
@@ -118,6 +152,21 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
           <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-600">Secure checkout</p>
           <h1 className="mt-3 text-4xl font-extrabold text-gray-900">Complete your booking</h1>
           <p className="mt-3 text-gray-600">Pay securely through Stripe. Platform fees are handled automatically.</p>
+
+          {(propertyTitle || checkIn) && (
+            <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5 text-sm">
+              {propertyTitle && <p className="font-bold text-gray-900">{propertyTitle}</p>}
+              {checkIn && checkOut && (
+                <p className="mt-2 text-gray-600">
+                  {checkIn} → {checkOut}
+                  {numGuests ? ` · ${numGuests} guest${numGuests === '1' ? '' : 's'}` : ''}
+                </p>
+              )}
+              {totalDisplay && (
+                <p className="mt-2 text-lg font-extrabold text-gray-900">Total ${totalDisplay}</p>
+              )}
+            </div>
+          )}
 
           <div className="mt-8">
             {loading && (

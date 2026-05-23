@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import type { AuthMode } from './AuthModal';
 
-export type SitePage = 'home' | 'hosts' | 'partners' | 'host-onboarding' | 'host-dashboard' | 'checkout';
+export type SitePage = 'home' | 'hosts' | 'partners' | 'host-onboarding' | 'host-dashboard' | 'checkout' | 'property';
 
 export default function Header({
   onShowAuth,

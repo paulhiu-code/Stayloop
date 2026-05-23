@@ -22,12 +22,32 @@ function getPropertyMeta(property: PropertyCardData) {
   };
 }
 
-export default function PropertyCard({ property }: { property: PropertyCardData }) {
+export default function PropertyCard({
+  property,
+  onViewStay,
+}: {
+  property: PropertyCardData;
+  onViewStay?: (propertyId: string) => void;
+}) {
   const mainImage = property.images[0] || 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=1200';
   const meta = getPropertyMeta(property);
+  const canNavigate = 'host_id' in property && Boolean(onViewStay);
 
   return (
-    <article className="group cursor-pointer bg-white rounded-[2rem] overflow-hidden border border-gray-200 hover:border-orange-300 transition-all duration-500 shadow-lg hover:shadow-2xl transform hover:-translate-y-2">
+    <article
+      className="group cursor-pointer bg-white rounded-[2rem] overflow-hidden border border-gray-200 hover:border-orange-300 transition-all duration-500 shadow-lg hover:shadow-2xl transform hover:-translate-y-2"
+      onClick={() => {
+        if (canNavigate) onViewStay?.(property.id);
+      }}
+      onKeyDown={(event) => {
+        if (canNavigate && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onViewStay?.(property.id);
+        }
+      }}
+      role={canNavigate ? 'button' : undefined}
+      tabIndex={canNavigate ? 0 : undefined}
+    >
       <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
         <img
           src={mainImage}
@@ -116,7 +136,14 @@ export default function PropertyCard({ property }: { property: PropertyCardData 
               <span className="text-sm text-gray-500 font-medium">/ night</span>
             </div>
           </div>
-          <button className="px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-bold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              if (canNavigate) onViewStay?.(property.id);
+            }}
+            className="px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-bold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+          >
             View stay
           </button>
         </div>
