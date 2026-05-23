@@ -58,7 +58,13 @@ export default function PMSSettings() {
       await loadConnections();
     } catch (error) {
       console.error('Sync failed:', error);
-      alert('Sync failed. Please try again.');
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as { message: unknown }).message)
+            : 'Sync failed. Please try again.';
+      alert(message);
     } finally {
       setSyncing(null);
     }
@@ -90,6 +96,7 @@ export default function PMSSettings() {
     setSelectedProvider(null);
     setAccountName('');
     setAccessToken('');
+    setOwnerRezEmail('');
     setRefreshToken('');
   };
 
@@ -97,13 +104,21 @@ export default function PMSSettings() {
     event.preventDefault();
     if (!selectedProvider || !accessToken.trim()) return;
 
+    if (selectedProvider === 'ownerrez' && !ownerRezEmail.trim()) {
+      alert('Enter the email address you use to log in to OwnerRez.');
+      return;
+    }
+
     setCreating(true);
     try {
       await createPMSConnection(
         selectedProvider,
         accessToken.trim(),
         refreshToken.trim() || undefined,
-        accountName.trim() || undefined
+        accountName.trim() || undefined,
+        selectedProvider === 'ownerrez'
+          ? { ownerrez_email: ownerRezEmail.trim().toLowerCase() }
+          : undefined
       );
       resetConnectionForm();
       setShowAddConnection(false);
@@ -204,7 +219,9 @@ export default function PMSSettings() {
                     Connect {pmsProviders.find(provider => provider.id === selectedProvider)?.name}
                   </h4>
                   <p className="mt-2 text-sm leading-6 text-gray-600">
-                    Paste your PMS API/OAuth access token to create a connection. For OwnerRez, request API access in OwnerRez and use the token provided for your account.
+                    {selectedProvider === 'ownerrez'
+                      ? 'Use your OwnerRez Personal Access Token (starts with pt_) and the same email you use to sign in to OwnerRez.'
+                      : 'Paste your PMS API/OAuth access token to create a connection.'}
                   </p>
                 </div>
 
@@ -219,12 +236,26 @@ export default function PMSSettings() {
                     />
                   </label>
 
+                  {selectedProvider === 'ownerrez' && (
+                    <label className="block md:col-span-2">
+                      <span className="mb-2 block text-sm font-semibold text-gray-700">OwnerRez login email</span>
+                      <input
+                        value={ownerRezEmail}
+                        onChange={(event) => setOwnerRezEmail(event.target.value)}
+                        placeholder="you@example.com"
+                        type="email"
+                        required
+                        className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                      />
+                    </label>
+                  )}
+
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-gray-700">Access token</span>
                     <input
                       value={accessToken}
                       onChange={(event) => setAccessToken(event.target.value)}
-                      placeholder="Paste API/OAuth token"
+                      placeholder={selectedProvider === 'ownerrez' ? 'pt_...' : 'Paste API/OAuth token'}
                       type="password"
                       required
                       className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"

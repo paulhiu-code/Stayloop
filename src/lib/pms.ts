@@ -48,6 +48,33 @@ export interface PMSSyncLog {
   created_at: string;
 }
 
+
+async function getFunctionInvokeErrorMessage(error: unknown, data: unknown): Promise<string> {
+  if (data && typeof data === 'object') {
+    const payload = data as { success?: boolean; error?: string; message?: string };
+    if (typeof payload.error === 'string' && payload.error) return payload.error;
+    if (typeof payload.message === 'string' && payload.message) return payload.message;
+    if (payload.success === false) return payload.error || 'Property sync failed.';
+  }
+
+  if (error && typeof error === 'object' && 'context' in error) {
+    const context = (error as { context?: Response }).context;
+    if (context) {
+      try {
+        const body = await context.json();
+        if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
+          return body.error;
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+  }
+
+  if (error instanceof Error && error.message) return error.message;
+  return 'Sync failed. Please try again.';
+}
+
 export const pmsProviders = [
   {
     id: 'ownerrez' as const,
@@ -125,7 +152,18 @@ export async function syncPMSProperties(connectionId: string): Promise<unknown> 
     },
   });
 
-  if (error) throw error;
+  const message = await getFunctionInvokeErrorMessage(error, data);
+  if (error) throw new Error(message);
+
+  const result = data as { success?: boolean; error?: string; result?: { succeeded?: number; processed?: number } } | null;
+  if (result?.success === false) {
+    throw new Error(result.error || message);
+  }
+
+  if (result?.result?.processed && result.result.succeeded === 0) {
+    throw new Error('OwnerRez properties were found but none could be saved. Check your host profile and try again.');
+  }
+
   return data;
 }
 

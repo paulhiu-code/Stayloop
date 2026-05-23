@@ -21,6 +21,57 @@ function getOwnerRezEmail(connection: Record<string, unknown>): string | null {
   return typeof email === 'string' && email.includes('@') ? email : null;
 }
 
+
+function createServiceSupabaseClient() {
+  const supabaseUrl = Deno.env.get('STAYLOOP_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey =
+    Deno.env.get('STAYLOOP_SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error(
+      'Missing Supabase secrets. Add STAYLOOP_SUPABASE_URL and STAYLOOP_SUPABASE_SERVICE_ROLE_KEY (or use SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY).'
+    );
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey);
+}
+
+async function resolveOwnerRezEmail(
+  supabase: ReturnType<typeof createClient>,
+  connection: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  if (getOwnerRezEmail(connection)) return connection;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('id', connection.user_id as string)
+    .maybeSingle();
+
+  let email = typeof profile?.email === 'string' ? profile.email : null;
+
+  if (!email) {
+    const { data: authData, error: authError } = await supabase.auth.admin.getUserById(
+      connection.user_id as string
+    );
+    if (!authError && authData.user?.email) {
+      email = authData.user.email;
+    }
+  }
+
+  if (!email) return connection;
+
+  const credentials = (connection.api_credentials as Record<string, unknown> | null) ?? {};
+
+  return {
+    ...connection,
+    api_credentials: {
+      ...credentials,
+      ownerrez_email: email,
+    },
+  };
+}
+
 async function ownerRezFetch(
   connection: Record<string, unknown>,
   token: string,
@@ -133,7 +184,7 @@ function mapOwnerRezProperty(prop: Record<string, unknown>, connection: Record<s
     state:
       (typeof addr.state === 'string' && addr.state) ||
       (typeof addr.province === 'string' && addr.province) ||
-      '',
+      'N/A',
     country: (typeof addr.country === 'string' && addr.country) || 'US',
     postal_code: typeof addr.postal_code === 'string' ? addr.postal_code : null,
     latitude: typeof prop.latitude === 'number' ? prop.latitude : null,
@@ -160,10 +211,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('STAYLOOP_SUPABASE_URL')!,
-      Deno.env.get('STAYLOOP_SUPABASE_SERVICE_ROLE_KEY')!
-    );
+    const supabase = createServiceSupabaseClient();
 
     const { action, pmsConnectionId, propertyId, webhookData }: SyncRequest = await req.json();
 
@@ -204,6 +252,20 @@ Deno.serve(async (req: Request) => {
       throw new Error('OwnerRez access token is missing');
     }
 
+    const { data: hostProfile, error: hostProfileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', connection.user_id)
+      .maybeSingle();
+
+    if (hostProfileError || !hostProfile) {
+      throw new Error(
+        'Your StayLoop host profile is missing. Sign out, sign in again, then retry sync.'
+      );
+    }
+
+    const resolvedConnection = await resolveOwnerRezEmail(supabase, connection);
+
     const { data: syncLog } = await supabase
       .from('pms_sync_logs')
       .insert({
@@ -219,19 +281,30 @@ Deno.serve(async (req: Request) => {
 
     switch (action) {
       case 'sync_properties':
-        result = await syncProperties(supabase, connection, ownerRezToken);
+        result = await syncProperties(supabase, resolvedConnection, ownerRezToken);
         break;
       case 'sync_bookings':
-        result = await syncBookings(supabase, connection, ownerRezToken, propertyId);
+        result = await syncBookings(supabase, resolvedConnection, ownerRezToken, propertyId);
         break;
       case 'sync_availability':
-        result = await syncAvailability(supabase, connection, ownerRezToken, propertyId);
+        result = await syncAvailability(supabase, resolvedConnection, ownerRezToken, propertyId);
         break;
       case 'webhook':
         result = await handleWebhook(supabase, connection, webhookData);
         break;
       default:
         throw new Error('Invalid action');
+    }
+
+    if (action === 'sync_properties') {
+      if (!result.processed) {
+        throw new Error('OwnerRez returned no active properties for this account.');
+      }
+      if (!result.succeeded) {
+        throw new Error(
+          `Could not import any properties (${result.failed} failed). Check Edge Function logs in Supabase.`
+        );
+      }
     }
 
     await supabase
@@ -290,7 +363,14 @@ async function syncProperties(supabase: any, connection: any, token: string) {
       const propertyData = mapOwnerRezProperty(prop, connection);
 
       if (mapping) {
-        await supabase.from('properties').update(propertyData).eq('id', mapping.stayloop_property_id);
+        const { error: updateError } = await supabase
+          .from('properties')
+          .update(propertyData)
+          .eq('id', mapping.stayloop_property_id);
+
+        if (updateError) {
+          throw updateError;
+        }
 
         await supabase
           .from('pms_property_mappings')
