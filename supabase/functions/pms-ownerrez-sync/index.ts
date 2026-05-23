@@ -228,12 +228,32 @@ async function fetchOwnerRezV1Json(
   return response.json();
 }
 
+function normalizeDateOnly(value: unknown): string {
+  const raw = String(value ?? '');
+  if (raw.length >= 10 && raw[4] === '-' && raw[7] === '-') {
+    return raw.slice(0, 10);
+  }
+  return raw;
+}
+
+function isPricingNightUnavailable(raw: Record<string, unknown>): boolean {
+  const flags = [
+    raw.isStayDisallowed,
+    raw.is_stay_disallowed,
+    raw.isArrivalDisallowed,
+    raw.is_arrival_disallowed,
+    raw.isDepartureDisallowed,
+    raw.is_departure_disallowed,
+  ];
+  return flags.some((flag) => flag === true);
+}
+
 function normalizePricingNight(raw: Record<string, unknown>): PricingNight {
   return {
-    date: String(raw.date),
+    date: normalizeDateOnly(raw.date),
     amount: Number(raw.amount ?? 0),
     minNights: Number(raw.minNights ?? raw.min_nights ?? 1),
-    isStayDisallowed: Boolean(raw.isStayDisallowed ?? raw.is_stay_disallowed ?? false),
+    isStayDisallowed: isPricingNightUnavailable(raw),
   };
 }
 
@@ -288,12 +308,16 @@ function expandBlockedDates(ranges: Record<string, unknown>[]): Set<string> {
   const blocked = new Set<string>();
 
   for (const range of ranges) {
-    const arrival = range.arrival ?? range.start ?? range.startDate;
-    const departure = range.departure ?? range.end ?? range.endDate;
-    if (typeof arrival !== 'string' || typeof departure !== 'string') continue;
+    const arrival = range.arrival ?? range.Arrival ?? range.start ?? range.startDate;
+    const departure = range.departure ?? range.Departure ?? range.end ?? range.endDate;
+    if (arrival == null || departure == null) continue;
 
-    let cursor = new Date(`${arrival}T12:00:00`);
-    const end = new Date(`${departure}T12:00:00`);
+    const arrivalDate = normalizeDateOnly(arrival);
+    const departureDate = normalizeDateOnly(departure);
+    if (!arrivalDate || !departureDate) continue;
+
+    let cursor = new Date(`${arrivalDate}T12:00:00`);
+    const end = new Date(`${departureDate}T12:00:00`);
     while (cursor < end) {
       blocked.add(formatDateOnly(cursor));
       cursor = addDays(cursor, 1);
@@ -306,9 +330,47 @@ function expandBlockedDates(ranges: Record<string, unknown>[]): Set<string> {
 
 function bookingBelongsToProperty(booking: Record<string, unknown>, propertyId: string): boolean {
   const bookingPropertyId = String(
-    booking.property_id ?? booking.propertyId ?? booking.listing_id ?? booking.listingId ?? ''
+    booking.property_id ??
+      booking.propertyId ??
+      booking.property?.id ??
+      booking.listing_id ??
+      booking.listingId ??
+      ''
   );
-  return bookingPropertyId === propertyId;
+  return bookingPropertyId === String(propertyId);
+}
+
+function addBookingRangeToBlocked(
+  booking: Record<string, unknown>,
+  blocked: Set<string>
+) {
+  const status = String(booking.status ?? '').toLowerCase();
+  if (status === 'canceled' || status === 'cancelled') return;
+
+  const arrival =
+    booking.arrival ?? booking.Arrival ?? booking.check_in ?? booking.checkIn ?? booking.start;
+  const departure =
+    booking.departure ?? booking.Departure ?? booking.check_out ?? booking.checkOut ?? booking.end;
+  if (arrival == null || departure == null) return;
+
+  for (const date of expandBlockedDates([{ arrival, departure }])) {
+    blocked.add(date);
+  }
+}
+
+async function fetchBlockedDatesFromV1ListingAvailability(
+  connection: Record<string, unknown>,
+  token: string,
+  propertyId: string
+): Promise<Set<string>> {
+  const today = formatDateOnly(new Date());
+  const end = formatDateOnly(addDays(new Date(), PRICING_SYNC_DAYS));
+  const path = `/listings/${propertyId}/availability?start=${today}&end=${end}`;
+  const payload = await fetchOwnerRezV1Json(connection, token, path);
+
+  const records = Array.isArray(payload) ? (payload as Record<string, unknown>[]) : [];
+  const bookingLike = records.filter((row) => row.arrival != null && row.departure != null);
+  return expandBlockedDates(bookingLike);
 }
 
 async function fetchBlockedDatesFromV2Bookings(
@@ -316,25 +378,17 @@ async function fetchBlockedDatesFromV2Bookings(
   token: string,
   propertyId: string
 ): Promise<Set<string>> {
-  const bookings = await fetchAllOwnerRezItems(
-    connection,
-    token,
-    `/bookings?property_ids=${propertyId}&status=active&include_blocks=true`
-  );
-
   const blocked = new Set<string>();
-  for (const booking of bookings) {
-    if (!bookingBelongsToProperty(booking, propertyId)) continue;
+  const paths = [
+    `/properties/${propertyId}/bookings`,
+    `/bookings?property_ids=${propertyId}`,
+  ];
 
-    const status = String(booking.status ?? '').toLowerCase();
-    if (status === 'canceled' || status === 'cancelled') continue;
-
-    const arrival = booking.arrival ?? booking.check_in ?? booking.checkIn;
-    const departure = booking.departure ?? booking.check_out ?? booking.checkOut;
-    if (typeof arrival !== 'string' || typeof departure !== 'string') continue;
-
-    for (const date of expandBlockedDates([{ arrival, departure }])) {
-      blocked.add(date);
+  for (const path of paths) {
+    const bookings = await fetchAllOwnerRezItems(connection, token, path);
+    for (const booking of bookings) {
+      if (!bookingBelongsToProperty(booking, propertyId)) continue;
+      addBookingRangeToBlocked(booking, blocked);
     }
   }
 
@@ -346,12 +400,25 @@ async function fetchBlockedDates(
   token: string,
   propertyId: string
 ): Promise<Set<string>> {
+  const blocked = new Set<string>();
+
   try {
-    return await fetchBlockedDatesFromV2Bookings(connection, token, propertyId);
+    for (const date of await fetchBlockedDatesFromV1ListingAvailability(connection, token, propertyId)) {
+      blocked.add(date);
+    }
   } catch (error) {
-    console.error(`OwnerRez bookings fetch failed for ${propertyId}:`, error);
-    return new Set();
+    console.error(`OwnerRez v1 listing availability failed for ${propertyId}:`, error);
   }
+
+  try {
+    for (const date of await fetchBlockedDatesFromV2Bookings(connection, token, propertyId)) {
+      blocked.add(date);
+    }
+  } catch (error) {
+    console.error(`OwnerRez v2 bookings fetch failed for ${propertyId}:`, error);
+  }
+
+  return blocked;
 }
 
 async function fetchCleaningFeeFromQuote(
@@ -485,7 +552,15 @@ async function syncOwnerRezPricingAndCalendar(
 
   await supabase.from('properties').update(propertyUpdate).eq('id', stayloopPropertyId);
 
-  return { processed, succeeded, failed, basePrice, cleaningFee };
+  return {
+    processed,
+    succeeded,
+    failed,
+    basePrice,
+    cleaningFee,
+    blockedNights: blockedDates.size,
+    pricingNights: pricingNights.length,
+  };
 }
 
 function mapOwnerRezProperty(prop: Record<string, unknown>, connection: Record<string, unknown>) {
