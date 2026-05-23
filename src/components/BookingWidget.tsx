@@ -21,11 +21,8 @@ type BookingWidgetProps = {
 };
 
 function buildUnavailableSet(calendarDays: { date: string; is_available: boolean }[]) {
-  return new Set(
-    calendarDays
-      .filter((day) => day.is_available === false || day.is_available === null)
-      .map((day) => day.date)
-  );
+  // Only grey dates OwnerRez sync marked blocked. Missing rows stay selectable until sync fills them.
+  return new Set(calendarDays.filter((day) => day.is_available === false).map((day) => day.date));
 }
 
 export default function BookingWidget({

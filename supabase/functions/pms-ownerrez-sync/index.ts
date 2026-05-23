@@ -237,15 +237,9 @@ function normalizeDateOnly(value: unknown): string {
 }
 
 function isPricingNightUnavailable(raw: Record<string, unknown>): boolean {
-  const flags = [
-    raw.isStayDisallowed,
-    raw.is_stay_disallowed,
-    raw.isArrivalDisallowed,
-    raw.is_arrival_disallowed,
-    raw.isDepartureDisallowed,
-    raw.is_departure_disallowed,
-  ];
-  return flags.some((flag) => flag === true);
+  // Only "stay" disallowed means the night itself is not bookable.
+  // Arrival/departure flags affect check-in/out rules; reservations come from bookings feed.
+  return raw.isStayDisallowed === true || raw.is_stay_disallowed === true;
 }
 
 function normalizePricingNight(raw: Record<string, unknown>): PricingNight {
@@ -365,7 +359,7 @@ async function fetchBlockedDatesFromV1ListingAvailability(
 ): Promise<Set<string>> {
   const today = formatDateOnly(new Date());
   const end = formatDateOnly(addDays(new Date(), PRICING_SYNC_DAYS));
-  const path = `/listings/${propertyId}/availability?start=${today}&end=${end}`;
+  const path = `/listings/availability?ids=${propertyId}&start=${today}&end=${end}`;
   const payload = await fetchOwnerRezV1Json(connection, token, path);
 
   const records = Array.isArray(payload) ? (payload as Record<string, unknown>[]) : [];
@@ -379,9 +373,11 @@ async function fetchBlockedDatesFromV2Bookings(
   propertyId: string
 ): Promise<Set<string>> {
   const blocked = new Set<string>();
+  const today = formatDateOnly(new Date());
+  const end = formatDateOnly(addDays(new Date(), PRICING_SYNC_DAYS));
   const paths = [
-    `/properties/${propertyId}/bookings`,
-    `/bookings?property_ids=${propertyId}`,
+    `/properties/${propertyId}/bookings?from=${today}&to=${end}`,
+    `/bookings?property_ids=${propertyId}&from=${today}&to=${end}`,
   ];
 
   for (const path of paths) {
@@ -552,6 +548,10 @@ async function syncOwnerRezPricingAndCalendar(
 
   await supabase.from('properties').update(propertyUpdate).eq('id', stayloopPropertyId);
 
+  const availableNights = pricingNights.filter(
+    (night) => !night.isStayDisallowed && !blockedDates.has(night.date)
+  ).length;
+
   return {
     processed,
     succeeded,
@@ -559,6 +559,7 @@ async function syncOwnerRezPricingAndCalendar(
     basePrice,
     cleaningFee,
     blockedNights: blockedDates.size,
+    availableNights,
     pricingNights: pricingNights.length,
   };
 }
