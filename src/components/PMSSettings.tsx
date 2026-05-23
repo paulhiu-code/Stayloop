@@ -57,7 +57,13 @@ export default function PMSSettings() {
       await loadConnections();
     } catch (error) {
       console.error('Sync failed:', error);
-      alert('Sync failed. Please try again.');
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as { message: unknown }).message)
+            : 'Sync failed. Please try again.';
+      alert(message);
     } finally {
       setSyncing(null);
     }
@@ -218,26 +224,12 @@ export default function PMSSettings() {
                     />
                   </label>
 
-                  {selectedProvider === 'ownerrez' && (
-                    <label className="block md:col-span-2">
-                      <span className="mb-2 block text-sm font-semibold text-gray-700">OwnerRez login email</span>
-                      <input
-                        value={ownerRezEmail}
-                        onChange={(event) => setOwnerRezEmail(event.target.value)}
-                        placeholder="you@example.com"
-                        type="email"
-                        required
-                        className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                      />
-                    </label>
-                  )}
-
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-gray-700">Access token</span>
                     <input
                       value={accessToken}
                       onChange={(event) => setAccessToken(event.target.value)}
-                      placeholder={selectedProvider === 'ownerrez' ? 'pt_...' : 'Paste API/OAuth token'}
+                      placeholder="Paste API/OAuth token"
                       type="password"
                       required
                       className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
