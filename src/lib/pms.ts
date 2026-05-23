@@ -49,6 +49,57 @@ export interface PMSSyncLog {
 }
 
 
+
+async function invokePMSEdgeFunction(
+  functionName: string,
+  body: Record<string, unknown>
+): Promise<Record<string, unknown> | null> {
+  const { data: session } = await supabase.auth.getSession();
+  const accessToken = session.session?.access_token;
+  if (!accessToken) {
+    throw new Error('Please sign in again, then retry sync.');
+  }
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\/rest\/v1\/?$/, '');
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !anonKey) {
+    throw new Error('StayLoop is missing Supabase configuration.');
+  }
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      apikey: anonKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  const raw = await response.text();
+  let payload: Record<string, unknown> | null = null;
+  try {
+    payload = raw ? JSON.parse(raw) : null;
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const detail =
+      payload && typeof payload.error === 'string'
+        ? payload.error
+        : raw?.slice(0, 400) ||
+          `Sync failed (HTTP ${response.status}). Open Supabase → Edge Functions → pms-ownerrez-sync → Logs.`;
+    throw new Error(detail);
+  }
+
+  if (payload?.success === false && typeof payload.error === 'string') {
+    throw new Error(payload.error);
+  }
+
+  return payload;
+}
+
 async function getFunctionInvokeErrorMessage(error: unknown, data: unknown): Promise<string> {
   if (data && typeof data === 'object') {
     const payload = data as { success?: boolean; error?: string; message?: string };
@@ -145,26 +196,17 @@ export async function syncPMSProperties(connectionId: string): Promise<unknown> 
     ? 'pms-ownerrez-sync'
     : 'pms-guesty-sync';
 
-  const { data, error } = await supabase.functions.invoke(functionName, {
-    body: {
-      action: 'sync_properties',
-      pmsConnectionId: connectionId,
-    },
+  const payload = await invokePMSEdgeFunction(functionName, {
+    action: 'sync_properties',
+    pmsConnectionId: connectionId,
   });
 
-  const message = await getFunctionInvokeErrorMessage(error, data);
-  if (error) throw new Error(message);
-
-  const result = data as { success?: boolean; error?: string; result?: { succeeded?: number; processed?: number } } | null;
-  if (result?.success === false) {
-    throw new Error(result.error || message);
-  }
-
-  if (result?.result?.processed && result.result.succeeded === 0) {
+  const result = payload?.result as { succeeded?: number; processed?: number } | undefined;
+  if (result?.processed && result.succeeded === 0) {
     throw new Error('OwnerRez properties were found but none could be saved. Check your host profile and try again.');
   }
 
-  return data;
+  return payload;
 }
 
 export async function syncPMSBookings(connectionId: string, propertyId?: string): Promise<unknown> {

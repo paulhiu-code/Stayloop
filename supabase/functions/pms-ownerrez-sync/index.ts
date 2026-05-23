@@ -107,6 +107,11 @@ async function fetchOwnerRezJson(
   const response = await ownerRezFetch(connection, token, path);
   if (!response.ok) {
     const body = await response.text();
+    if (response.status === 401) {
+      throw new Error(
+        'OwnerRez login failed (401). Use the exact email you sign in with at ownerrez.com with your pt_ token. If you use Google on StayLoop, that email may not match OwnerRez — set ownerrez_email in Supabase or re-add the connection with your OwnerRez email.'
+      );
+    }
     throw new Error(`OwnerRez API error (${response.status}): ${body || response.statusText}`);
   }
   return response.json();
@@ -265,6 +270,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const resolvedConnection = await resolveOwnerRezEmail(supabase, connection);
+
+    if (getOwnerRezEmail(resolvedConnection)) {
+      await supabase
+        .from('pms_connections')
+        .update({ api_credentials: resolvedConnection.api_credentials })
+        .eq('id', connection.id);
+    }
 
     const { data: syncLog } = await supabase
       .from('pms_sync_logs')
