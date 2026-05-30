@@ -9,8 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "server": "node server/index.js",
-    "start": "node server/index.js"
+    "verify:supabase": "node scripts/verify-supabase.mjs"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.3.0",
