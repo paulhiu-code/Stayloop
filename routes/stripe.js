@@ -18,7 +18,10 @@ const pool = new Pool({
 const router = express.Router();
 
 function requireUser(req, res, next) {
-  const userId = req.user?.id || req.auth?.userId || req.headers['x-user-id'];
+  // req.user is populated by the authenticateUser middleware after verifying the
+  // Supabase access token. We intentionally do not fall back to a client-supplied
+  // header, which could be spoofed.
+  const userId = req.user?.id;
 
   if (!userId || typeof userId !== 'string') {
     return res.status(401).json({ error: 'Authenticated user is required' });
