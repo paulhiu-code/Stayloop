@@ -121,19 +121,20 @@ function normalizeFilters(filters: SearchFilters): Required<Pick<SearchFilters, 
 }
 
 function rpcPayload(filters: ReturnType<typeof normalizeFilters>) {
+  const offset = (filters.page - 1) * filters.pageSize;
   return {
-    p_where: filters.where || null,
+    p_location: filters.where?.trim() || null,
     p_check_in: filters.checkIn || null,
     p_check_out: filters.checkOut || null,
-    p_guests: filters.guests || null,
+    p_guests: filters.guests || 1,
     p_min_price: filters.minPrice ?? null,
     p_max_price: filters.maxPrice ?? null,
     p_property_types: filters.propertyTypes?.length ? filters.propertyTypes : null,
     p_amenities: filters.amenities?.length ? filters.amenities : null,
     p_instant_book: filters.instantBook ?? null,
     p_sort: filters.sort,
-    p_page: filters.page,
-    p_page_size: filters.pageSize,
+    p_limit: filters.pageSize,
+    p_offset: offset,
   };
 }
 
@@ -262,7 +263,7 @@ async function searchPropertiesFallback(filters: ReturnType<typeof normalizeFilt
   if (filters.instantBook) query = query.eq('instant_book', true);
 
   for (const amenity of filters.amenities || []) {
-    query = query.contains('amenities', JSON.stringify([amenity]));
+    query = query.contains('amenities', [amenity]);
   }
 
   switch (filters.sort) {
@@ -336,7 +337,18 @@ export async function searchProperties(filters: SearchFilters = {}): Promise<Sea
     console.warn('search_properties RPC unavailable, using client fallback:', error);
   }
 
-  return searchPropertiesFallback(normalized);
+  try {
+    return await searchPropertiesFallback(normalized);
+  } catch (error) {
+    console.error('Search fallback failed:', error);
+    return {
+      properties: [],
+      totalCount: 0,
+      page: normalized.page,
+      pageSize: normalized.pageSize,
+      hasMore: false,
+    };
+  }
 }
 
 export function applyCategoryPreset(category: string): Partial<SearchFilters> {

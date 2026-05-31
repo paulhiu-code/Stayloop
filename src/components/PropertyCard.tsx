@@ -4,6 +4,8 @@ import type { ShowcaseProperty } from '../data/showcase';
 
 type PropertyCardData = Property | ShowcaseProperty;
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export type PropertyCardSearchContext = {
   totalPrice?: number;
   nights?: number;
@@ -49,7 +51,7 @@ export default function PropertyCard({
 }) {
   const mainImage = property.images[0] || 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=1200';
   const meta = getPropertyMeta(property, searchContext);
-  const canNavigate = 'host_id' in property && Boolean(onViewStay);
+  const canNavigate = UUID_PATTERN.test(property.id) && Boolean(onViewStay);
   const showStayTotal = searchContext?.totalPrice != null && searchContext.nights != null && searchContext.nights > 0;
 
   return (
