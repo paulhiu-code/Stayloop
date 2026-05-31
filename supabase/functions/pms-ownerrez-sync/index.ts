@@ -9,7 +9,7 @@ const corsHeaders = {
 const OWNERREZ_API_BASE = 'https://api.ownerrez.com/v2';
 
 interface SyncRequest {
-  action: 'sync_properties' | 'sync_bookings' | 'sync_availability' | 'sync_all' | 'webhook' | 'test_ownerrez';
+  action: 'sync_properties' | 'sync_bookings' | 'sync_availability' | 'sync_reviews' | 'sync_all' | 'webhook' | 'test_ownerrez';
   pmsConnectionId: string;
   propertyId?: string;
   webhookData?: any;
@@ -24,6 +24,8 @@ function syncTypeFromAction(action: string): string {
       return 'booking';
     case 'sync_availability':
       return 'availability';
+    case 'sync_reviews':
+      return 'review';
     case 'sync_all':
       return 'full';
     case 'webhook':
@@ -827,7 +829,7 @@ function extractOwnerRezGuestInfo(booking: Record<string, unknown>) {
 }
 
 function ownerRezBookingQuerySuffix(): string {
-  return 'include_guest=true&include_charges=true';
+  return 'include_guest=true&include_charges=true&include_cancellation_policy=true';
 }
 
 function buildOwnerRezBookingsPath(propertyId?: string): string {
@@ -994,6 +996,9 @@ Deno.serve(async (req: Request) => {
       case 'sync_availability':
         result = await syncAvailability(supabase, resolvedConnection, ownerRezToken, propertyId);
         break;
+      case 'sync_reviews':
+        result = await syncReviews(supabase, resolvedConnection, ownerRezToken, propertyId);
+        break;
       case 'sync_all':
         result = await syncAllFromOwnerRez(supabase, resolvedConnection, ownerRezToken);
         break;
@@ -1131,11 +1136,201 @@ async function syncProperties(supabase: any, connection: any, token: string) {
         });
       }
 
+      if (stayloopPropertyId) {
+        try {
+          const cancellationPolicy = await fetchPropertyCancellationPolicy(
+            connection,
+            token,
+            pmsPropertyId
+          );
+          if (cancellationPolicy) {
+            await supabase
+              .from('properties')
+              .update({ cancellation_policy: cancellationPolicy })
+              .eq('id', stayloopPropertyId);
+          }
+        } catch (policyError) {
+          console.warn(`Cancellation policy sync failed for ${pmsPropertyId}:`, policyError);
+        }
+      }
+
       // Calendar/pricing runs via sync_all or sync_availability to avoid worker timeouts.
 
       succeeded++;
     } catch (error) {
       console.error(`Failed to sync property ${String(prop.id)}:`, error);
+      failed++;
+    }
+  }
+
+  return { processed, succeeded, failed };
+}
+
+
+function pickBestCancellationPolicy(current: string | null, candidate: unknown): string | null {
+  const next = typeof candidate === 'string' ? candidate.trim() : '';
+  if (!next) return current;
+  if (!current || next.length > current.length) return next;
+  return current;
+}
+
+async function fetchPropertyCancellationPolicy(
+  connection: Record<string, unknown>,
+  token: string,
+  propertyId: string
+): Promise<string | null> {
+  try {
+    const bookings = await fetchAllOwnerRezItems(
+      connection,
+      token,
+      `/bookings?property_ids=${encodeURIComponent(propertyId)}&include_cancellation_policy=true&limit=10`
+    );
+    let best: string | null = null;
+    for (const booking of bookings) {
+      best = pickBestCancellationPolicy(best, booking.cancellation_policy_description);
+    }
+    return best;
+  } catch (error) {
+    console.warn(`Cancellation policy fetch failed for property ${propertyId}:`, error);
+    return null;
+  }
+}
+
+async function applyPropertyCancellationPolicies(
+  supabase: ReturnType<typeof createClient>,
+  policies: Map<string, string>
+) {
+  for (const [propertyId, policy] of policies.entries()) {
+    if (!policy) continue;
+    await supabase.from('properties').update({ cancellation_policy: policy }).eq('id', propertyId);
+  }
+}
+
+function buildOwnerRezReviewsPath(propertyId?: string): string {
+  if (propertyId) {
+    return `/reviews?property_id=${encodeURIComponent(propertyId)}&active=true`;
+  }
+  return '/reviews?active=true&since_utc=2020-01-01T00:00:00Z';
+}
+
+async function syncReviews(
+  supabase: ReturnType<typeof createClient>,
+  connection: Record<string, unknown>,
+  token: string,
+  propertyId?: string
+) {
+  const { data: mappings, error: mappingError } = await supabase
+    .from('pms_property_mappings')
+    .select('pms_property_id, stayloop_property_id')
+    .eq('pms_connection_id', connection.id);
+
+  if (mappingError) throw mappingError;
+
+  const mappingByPmsId = new Map<string, { stayloopPropertyId: string; hostId: string | null }>();
+  for (const mapping of mappings || []) {
+    const { data: property } = await supabase
+      .from('properties')
+      .select('host_id')
+      .eq('id', mapping.stayloop_property_id)
+      .maybeSingle();
+    mappingByPmsId.set(String(mapping.pms_property_id), {
+      stayloopPropertyId: mapping.stayloop_property_id,
+      hostId: property?.host_id ?? null,
+    });
+  }
+
+  if (propertyId && !mappingByPmsId.has(String(propertyId))) {
+    throw new Error('Property mapping not found for review sync');
+  }
+
+  const reviews = await fetchAllOwnerRezItems(connection, token, buildOwnerRezReviewsPath(propertyId));
+  const bookingLookup = new Map<string, string>();
+  const stayloopPropertyIds = [...new Set((mappings || []).map((m) => m.stayloop_property_id))];
+  if (stayloopPropertyIds.length > 0) {
+    const { data: importedBookings } = await supabase
+      .from('bookings')
+      .select('id, property_id, external_pms_booking_id')
+      .in('property_id', stayloopPropertyIds)
+      .eq('external_pms_provider', 'ownerrez')
+      .not('external_pms_booking_id', 'is', null);
+    for (const booking of importedBookings || []) {
+      bookingLookup.set(`${booking.property_id}:${booking.external_pms_booking_id}`, booking.id);
+    }
+  }
+
+  let processed = 0;
+  let succeeded = 0;
+  let failed = 0;
+  const syncedAt = new Date().toISOString();
+
+  for (const review of reviews) {
+    processed++;
+    try {
+      if (review.visible === false) {
+        continue;
+      }
+
+      const reviewPropertyId = String(review.property_id ?? review.property?.id ?? '');
+      const mapped = mappingByPmsId.get(reviewPropertyId);
+      if (!mapped?.hostId) {
+        failed++;
+        continue;
+      }
+
+      const externalReviewId = String(review.id);
+      const stars = Number(review.stars ?? 0);
+      if (!Number.isFinite(stars) || stars < 1 || stars > 5) {
+        failed++;
+        continue;
+      }
+
+      const externalBookingId =
+        review.booking_id != null ? String(review.booking_id) : null;
+      const linkedBookingId = externalBookingId
+        ? bookingLookup.get(`${mapped.stayloopPropertyId}:${externalBookingId}`) ?? null
+        : null;
+
+      const reviewRow = {
+        property_id: mapped.stayloopPropertyId,
+        booking_id: linkedBookingId,
+        reviewer_id: null,
+        reviewee_id: mapped.hostId,
+        rating: Math.round(stars),
+        comment: typeof review.body === 'string' ? review.body.trim() : null,
+        external_pms_review_id: externalReviewId,
+        external_pms_provider: 'ownerrez',
+        guest_reviewer_name:
+          typeof review.reviewer === 'string' && review.reviewer.trim()
+            ? review.reviewer.trim()
+            : 'Guest',
+        review_source:
+          typeof review.listing_site === 'string'
+            ? review.listing_site.toLowerCase()
+            : 'ownerrez',
+        synced_at: syncedAt,
+      };
+
+      const { data: existingReview } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('property_id', mapped.stayloopPropertyId)
+        .eq('external_pms_review_id', externalReviewId)
+        .maybeSingle();
+
+      if (existingReview) {
+        const { error: updateError } = await supabase
+          .from('reviews')
+          .update(reviewRow)
+          .eq('id', existingReview.id);
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase.from('reviews').insert(reviewRow);
+        if (insertError) throw insertError;
+      }
+
+      succeeded++;
+    } catch (error) {
+      console.error(`Failed to sync review ${String(review.id)}:`, error);
       failed++;
     }
   }
@@ -1149,6 +1344,7 @@ async function syncBookings(supabase: any, connection: any, token: string, prope
   let succeeded = 0;
   let failed = 0;
   const guestContactCache = new Map<string, { guest_email: string | null; guest_phone: string | null }>();
+  const propertyCancellationPolicies = new Map<string, string>();
 
   for (const booking of bookings) {
     processed++;
@@ -1266,6 +1462,15 @@ async function syncBookings(supabase: any, connection: any, token: string, prope
         { onConflict: 'pms_connection_id,pms_booking_id' }
       );
 
+      const currentPolicy = propertyCancellationPolicies.get(mapping.stayloop_property_id) ?? null;
+      const nextPolicy = pickBestCancellationPolicy(
+        currentPolicy,
+        booking.cancellation_policy_description
+      );
+      if (nextPolicy) {
+        propertyCancellationPolicies.set(mapping.stayloop_property_id, nextPolicy);
+      }
+
       succeeded++;
     } catch (error) {
       console.error(`Failed to sync booking ${String(booking.id)}:`, error);
@@ -1273,7 +1478,14 @@ async function syncBookings(supabase: any, connection: any, token: string, prope
     }
   }
 
-  return { processed, succeeded, failed };
+  await applyPropertyCancellationPolicies(supabase, propertyCancellationPolicies);
+
+  return {
+    processed,
+    succeeded,
+    failed,
+    cancellationPoliciesUpdated: propertyCancellationPolicies.size,
+  };
 }
 
 async function syncAvailability(supabase: any, connection: any, token: string, propertyId?: string) {
@@ -1352,6 +1564,13 @@ async function syncAllFromOwnerRez(supabase: any, connection: any, token: string
     bookingResult = await syncBookings(supabase, connection, token);
   }
 
+  let reviewResult = { processed: 0, succeeded: 0, failed: 0 };
+  try {
+    reviewResult = await syncReviews(supabase, connection, token);
+  } catch (error) {
+    console.error('Review sync failed during sync_all:', error);
+  }
+
   await supabase
     .from('pms_connections')
     .update({
@@ -1367,6 +1586,7 @@ async function syncAllFromOwnerRez(supabase: any, connection: any, token: string
     failed,
     calendars: calendarResults,
     bookings: bookingResult,
+    reviews: reviewResult,
   };
 }
 
