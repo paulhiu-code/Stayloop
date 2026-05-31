@@ -163,6 +163,19 @@ async function fetchOwnerRezJson(
   return response.json();
 }
 
+function normalizeOwnerRezPaginationPath(nextPageUrl: string): string {
+  if (nextPageUrl.startsWith('http')) {
+    return nextPageUrl
+      .replace(OWNERREZ_API_BASE, '')
+      .replace('https://api.ownerrez.com/v2', '')
+      .replace('https://api.ownerrez.com', '');
+  }
+  if (nextPageUrl.startsWith('/v2/')) {
+    return nextPageUrl.slice(3);
+  }
+  return nextPageUrl;
+}
+
 async function fetchAllOwnerRezItems(
   connection: Record<string, unknown>,
   token: string,
@@ -178,7 +191,7 @@ async function fetchAllOwnerRezItems(
 
     const nextPageUrl = page.next_page_url;
     if (typeof nextPageUrl === 'string' && nextPageUrl.length > 0) {
-      path = nextPageUrl.replace(OWNERREZ_API_BASE, '');
+      path = normalizeOwnerRezPaginationPath(nextPageUrl);
     } else {
       path = null;
     }
