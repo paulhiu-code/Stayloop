@@ -656,9 +656,20 @@ function extractOwnerRezListingAmenities(listing: Record<string, unknown> | null
     for (const amenity of flat) {
       if (typeof amenity === 'string' && amenity.trim()) amenities.add(amenity.trim());
       else if (amenity && typeof amenity === 'object') {
-        const name = (amenity as Record<string, unknown>).name;
-        if (typeof name === 'string' && name.trim()) amenities.add(name.trim());
+        const row = amenity as Record<string, unknown>;
+        const label = row.name ?? row.text ?? row.title;
+        if (typeof label === 'string' && label.trim()) amenities.add(label.trim());
       }
+    }
+  }
+
+  const callOuts = listing?.amenity_call_outs;
+  if (Array.isArray(callOuts)) {
+    for (const callOut of callOuts) {
+      if (!callOut || typeof callOut !== 'object') continue;
+      const row = callOut as Record<string, unknown>;
+      const label = row.text ?? row.title;
+      if (typeof label === 'string' && label.trim()) amenities.add(label.trim());
     }
   }
 
@@ -671,8 +682,9 @@ function extractOwnerRezListingAmenities(listing: Record<string, unknown> | null
       for (const amenity of rows) {
         if (typeof amenity === 'string' && amenity.trim()) amenities.add(amenity.trim());
         else if (amenity && typeof amenity === 'object') {
-          const name = (amenity as Record<string, unknown>).name;
-          if (typeof name === 'string' && name.trim()) amenities.add(name.trim());
+          const row = amenity as Record<string, unknown>;
+          const label = row.name ?? row.text ?? row.title;
+          if (typeof label === 'string' && label.trim()) amenities.add(label.trim());
         }
       }
     }
