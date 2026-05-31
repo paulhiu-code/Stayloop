@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
+import { apiRequest } from '../lib/api';
 import { supabase, Profile } from '../lib/supabase';
 
 export type UserType = Profile['user_type'];
@@ -142,6 +143,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (profileError) throw profileError;
     await fetchProfile(authData.user.id);
+
+    if (import.meta.env.VITE_API_BASE_URL) {
+      apiRequest('/api/account/send-welcome', { method: 'POST' }).catch((welcomeError) => {
+        console.error('Welcome email request failed:', welcomeError);
+      });
+    }
+
     return { needsEmailConfirmation: false };
   }
 

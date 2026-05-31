@@ -1,75 +1,13 @@
-const SITE_URL = (process.env.SITE_URL || 'https://stay-loop.co').replace(/\/$/, '');
-
-function formatCurrency(amount) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-}
-
-function formatDate(value) {
-  if (!value) return '';
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date);
-}
-
-function confirmationCode(bookingId) {
-  return `SL-${String(bookingId).replace(/-/g, '').slice(0, 6).toUpperCase()}`;
-}
-
-async function wasTriggerSent(pool, bookingId, triggerSlug) {
-  const { rows } = await pool.query(
-    `SELECT 1
-     FROM email_delivery_log
-     WHERE trigger_slug = $1
-       AND (
-         metadata->>'booking_id' = $2
-         OR metadata->'variables'->>'booking_id' = $2
-       )
-       AND status = 'sent'
-     LIMIT 1`,
-    [triggerSlug, bookingId]
-  );
-
-  return rows.length > 0;
-}
-
-async function sendTriggerEmail({ trigger, to, variables }) {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required to send emails.');
-  }
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: serviceRoleKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      action: 'send',
-      trigger,
-      to,
-      variables: {
-        ...variables,
-        booking_id: variables.booking_id,
-      },
-    }),
-  });
-
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(payload?.error || `send-email failed with ${response.status}`);
-  }
-
-  return payload;
-}
+import {
+  SITE_URL,
+  addInterval,
+  anchorDateTime,
+  bookingDedupeKey,
+  confirmationCode,
+  dispatchTrigger,
+  formatCurrency,
+  formatDate,
+} from './email-dispatch.js';
 
 async function loadBookingContext(pool, bookingId) {
   const { rows } = await pool.query(
@@ -83,10 +21,13 @@ async function loadBookingContext(pool, bookingId) {
        b.num_guests,
        b.total_amount,
        b.host_payout,
+       b.host_service_fee,
        b.stripe_payment_intent_id,
        b.guest_user_id,
        b.host_user_id,
+       b.updated_at,
        p.title AS property_title,
+       p.house_rules,
        guest.email AS guest_email,
        guest.full_name AS guest_name,
        host.email AS host_email,
@@ -103,10 +44,9 @@ async function loadBookingContext(pool, bookingId) {
   return rows[0] || null;
 }
 
-function buildEmailVariables(booking) {
+function buildBookingVariables(booking, extras = {}) {
   const checkIn = booking.check_in_date || booking.check_in;
   const checkOut = booking.check_out_date || booking.check_out;
-  const code = confirmationCode(booking.id);
 
   return {
     booking_id: booking.id,
@@ -119,10 +59,50 @@ function buildEmailVariables(booking) {
     total_amount: formatCurrency(Number(booking.total_amount || 0)),
     host_payout: formatCurrency(Number(booking.host_payout || 0)),
     payment_date: formatDate(new Date()),
-    confirmation_code: code,
+    confirmation_code: confirmationCode(booking.id),
     manage_booking_url: `${SITE_URL}/dashboard`,
+    message_host_url: `${SITE_URL}/dashboard`,
+    conversation_url: `${SITE_URL}/dashboard`,
+    review_url: `${SITE_URL}/dashboard?review=${booking.id}`,
+    check_in_instructions:
+      booking.house_rules?.slice(0, 500) ||
+      'Your host will share final check-in details before arrival.',
     site_url: SITE_URL,
+    ...extras,
   };
+}
+
+async function sendReferralCommissionEmails(pool, bookingId, variables) {
+  const { rows } = await pool.query(
+    `SELECT
+       re.id,
+       re.referral_level,
+       re.commission_amount,
+       earner.email AS earner_email,
+       earner.full_name AS earner_name
+     FROM referral_earnings re
+     JOIN profiles earner ON earner.id = re.earner_id
+     WHERE re.booking_id = $1`,
+    [bookingId]
+  );
+
+  const sends = [];
+  for (const earning of rows) {
+    const result = await dispatchTrigger(pool, {
+      triggerSlug: 'referral.commission.earned',
+      to: earning.earner_email,
+      dedupeKey: bookingDedupeKey(bookingId, 'referral.commission.earned', `L${earning.referral_level}`),
+      variables: {
+        ...variables,
+        host_name: earning.earner_name || 'Host',
+        referral_amount: formatCurrency(Number(earning.commission_amount || 0)),
+        referral_level: `Level ${earning.referral_level}`,
+      },
+    });
+    sends.push({ trigger: 'referral.commission.earned', to: earning.earner_email, ...result });
+  }
+
+  return sends;
 }
 
 export async function confirmBookingAndSendEmails(pool, { bookingId, paymentIntentId, userId }) {
@@ -164,43 +144,75 @@ export async function confirmBookingAndSendEmails(pool, { bookingId, paymentInte
     booking.status = 'confirmed';
   }
 
-  const variables = buildEmailVariables(booking);
+  const variables = buildBookingVariables(booking);
   const sends = [];
 
-  const triggers = [
+  for (const trigger of [
     { slug: 'booking.confirmed.guest', to: booking.guest_email },
     { slug: 'booking.confirmed.host', to: booking.host_email },
     { slug: 'booking.payment.receipt', to: booking.guest_email },
-  ];
-
-  for (const trigger of triggers) {
-    if (!trigger.to) continue;
-
-    const alreadySent = await wasTriggerSent(pool, bookingId, trigger.slug);
-    if (alreadySent) {
-      sends.push({ trigger: trigger.slug, to: trigger.to, skipped: true });
-      continue;
-    }
-
-    const result = await sendTriggerEmail({
-      trigger: trigger.slug,
+  ]) {
+    const result = await dispatchTrigger(pool, {
+      triggerSlug: trigger.slug,
       to: trigger.to,
+      dedupeKey: bookingDedupeKey(bookingId, trigger.slug),
       variables,
     });
-
-    sends.push({
-      trigger: trigger.slug,
-      to: trigger.to,
-      messageId: result.messageId,
-      skipped: false,
-    });
+    sends.push({ trigger: trigger.slug, to: trigger.to, ...result });
   }
+
+  const referralSends = await sendReferralCommissionEmails(pool, bookingId, variables);
+  sends.push(...referralSends);
 
   return {
     bookingId,
     status: booking.status,
     emails: sends,
   };
+}
+
+export async function sendBookingCancelledEmails(pool, bookingId) {
+  const booking = await loadBookingContext(pool, bookingId);
+  if (!booking) return null;
+
+  const variables = buildBookingVariables(booking, {
+    refund_amount: formatCurrency(Number(booking.total_amount || 0)),
+  });
+
+  const sends = [];
+  for (const trigger of [
+    { slug: 'booking.cancelled.guest', to: booking.guest_email },
+    { slug: 'booking.cancelled.host', to: booking.host_email },
+  ]) {
+    const result = await dispatchTrigger(pool, {
+      triggerSlug: trigger.slug,
+      to: trigger.to,
+      dedupeKey: bookingDedupeKey(bookingId, trigger.slug),
+      variables,
+    });
+    sends.push({ trigger: trigger.slug, to: trigger.to, ...result });
+  }
+
+  return { bookingId, emails: sends };
+}
+
+export async function sendHostPayoutEmail(pool, bookingId) {
+  const booking = await loadBookingContext(pool, bookingId);
+  if (!booking) return null;
+
+  const variables = buildBookingVariables(booking, {
+    payout_amount: formatCurrency(Number(booking.host_payout || 0)),
+    payout_date: formatDate(new Date()),
+  });
+
+  const result = await dispatchTrigger(pool, {
+    triggerSlug: 'payout.sent.host',
+    to: booking.host_email,
+    dedupeKey: bookingDedupeKey(bookingId, 'payout.sent.host'),
+    variables,
+  });
+
+  return { bookingId, emails: [result] };
 }
 
 export async function confirmBookingByPaymentIntent(pool, paymentIntentId) {
@@ -212,12 +224,88 @@ export async function confirmBookingByPaymentIntent(pool, paymentIntentId) {
     [paymentIntentId]
   );
 
-  if (!rows[0]) {
-    return null;
-  }
+  if (!rows[0]) return null;
 
   return confirmBookingAndSendEmails(pool, {
     bookingId: rows[0].id,
     paymentIntentId,
   });
+}
+
+export async function processBookingLifecycleEmails(pool) {
+  const { rows: steps } = await pool.query(
+    `SELECT
+       ess.id,
+       ess.step_order,
+       ess.delay_interval::text AS delay_interval,
+       ess.delay_anchor,
+       et.slug AS trigger_slug,
+       et.recipient_role
+     FROM email_sequence_steps ess
+     JOIN email_sequences es ON es.id = ess.sequence_id
+     JOIN email_triggers et ON et.id = ess.trigger_id
+     WHERE es.slug = 'booking.lifecycle'
+       AND es.is_active = true
+       AND ess.is_active = true
+       AND et.is_active = true
+       AND et.slug NOT IN ('booking.confirmed.guest', 'booking.confirmed.host', 'booking.payment.receipt')
+     ORDER BY ess.step_order ASC`
+  );
+
+  const { rows: bookings } = await pool.query(
+    `SELECT
+       b.id,
+       b.status,
+       b.check_in,
+       b.check_out,
+       b.check_in_date,
+       b.check_out_date,
+       b.num_guests,
+       b.total_amount,
+       b.host_payout,
+       b.updated_at,
+       p.title AS property_title,
+       p.house_rules,
+       guest.email AS guest_email,
+       guest.full_name AS guest_name
+     FROM bookings b
+     JOIN properties p ON p.id = b.property_id
+     JOIN profiles guest ON guest.id = b.guest_user_id
+     WHERE b.status IN ('confirmed', 'checked_in', 'checked_out')
+       AND b.check_out >= CURRENT_DATE - INTERVAL '3 days'
+       AND b.check_in <= CURRENT_DATE + INTERVAL '14 days'`
+  );
+
+  const now = Date.now();
+  const results = [];
+
+  for (const booking of bookings) {
+    const variables = buildBookingVariables(booking);
+
+    for (const step of steps) {
+      const anchor = anchorDateTime(booking, step.delay_anchor);
+      const dueAt = addInterval(anchor, step.delay_interval);
+      if (!dueAt) continue;
+
+      const graceMs = 36 * 60 * 60 * 1000;
+      if (now < dueAt.getTime() || now > dueAt.getTime() + graceMs) continue;
+
+      const dedupeKey = bookingDedupeKey(booking.id, step.trigger_slug, `step-${step.step_order}`);
+      const result = await dispatchTrigger(pool, {
+        triggerSlug: step.trigger_slug,
+        to: booking.guest_email,
+        dedupeKey,
+        variables,
+      });
+
+      results.push({
+        bookingId: booking.id,
+        trigger: step.trigger_slug,
+        dueAt: dueAt.toISOString(),
+        ...result,
+      });
+    }
+  }
+
+  return results;
 }

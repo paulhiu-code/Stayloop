@@ -241,7 +241,7 @@ async function main() {
       body: JSON.stringify({
         slug: 'booking.lifecycle',
         name: 'Booking lifecycle',
-        description: 'Confirmation, pre-arrival reminders, and review request.',
+        description: 'Confirmation, pre-arrival (48h before check-in), day-of reminder, and review request (3h after checkout).',
         anchor_trigger_id: confirmed.id,
         is_active: true,
       }),
@@ -249,8 +249,9 @@ async function main() {
     const sequence = sequenceRows[0];
     const stepDefs = [
       ['booking.confirmed.guest', 0, '0 seconds', 'trigger'],
-      ['booking.reminder.checkin.guest', 1, '-7 days', 'check_in'],
-      ['review.request.guest', 2, '1 day', 'check_out'],
+      ['booking.reminder.checkin.guest', 1, '-2 days', 'check_in'],
+      ['booking.reminder.checkin.guest', 2, '0 days', 'check_in'],
+      ['review.request.guest', 3, '3 hours', 'check_out'],
     ];
     for (const [triggerSlug, stepOrder, delay, anchor] of stepDefs) {
       const trigger = (await rest(`email_triggers?select=id&slug=eq.${triggerSlug}`))[0];

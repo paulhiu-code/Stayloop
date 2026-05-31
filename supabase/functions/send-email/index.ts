@@ -246,7 +246,12 @@ Deno.serve(async (req: Request) => {
         subject,
         status: 'sent',
         provider_message_id: result.id,
-        metadata: { variables, version: template.version },
+        metadata: {
+          variables,
+          version: template.version,
+          dedupe_key: typeof variables.dedupe_key === 'string' ? variables.dedupe_key : null,
+          booking_id: typeof variables.booking_id === 'string' ? variables.booking_id : null,
+        },
       });
 
       return jsonResponse({

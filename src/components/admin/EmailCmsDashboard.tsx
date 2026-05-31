@@ -21,6 +21,7 @@ import {
   EmailSequenceStep,
   EmailTriggerWithTemplate,
   getTemplateForTrigger,
+  getTriggerWiring,
   renderTemplateString,
 } from '../../lib/emailCms';
 import { supabase } from '../../lib/supabase';
@@ -304,6 +305,13 @@ export default function EmailCmsDashboard({
               <div className="mt-4 max-h-[70vh] space-y-2 overflow-y-auto">
                 {filteredTriggers.map((trigger) => {
                   const active = trigger.id === selectedTriggerId;
+                  const wiring = getTriggerWiring(trigger.slug);
+                  const wiringClass =
+                    wiring.status === 'live'
+                      ? 'bg-green-500/15 text-green-300'
+                      : wiring.status === 'scheduled'
+                        ? 'bg-sky-500/15 text-sky-300'
+                        : 'bg-slate-700 text-slate-300';
                   return (
                     <button
                       key={trigger.id}
@@ -315,9 +323,14 @@ export default function EmailCmsDashboard({
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-white">{trigger.name}</span>
-                        {!trigger.is_active && (
-                          <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-bold uppercase">Off</span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${wiringClass}`}>
+                            {wiring.status}
+                          </span>
+                          {!trigger.is_active && (
+                            <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-bold uppercase">Off</span>
+                          )}
+                        </div>
                       </div>
                       <p className="mt-1 text-xs text-slate-400">{trigger.slug}</p>
                     </button>
@@ -334,6 +347,21 @@ export default function EmailCmsDashboard({
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-300">{selectedTrigger.category}</p>
                       <h2 className="mt-2 text-2xl font-bold">{selectedTrigger.name}</h2>
                       <p className="mt-2 max-w-2xl text-sm text-slate-400">{selectedTrigger.description}</p>
+                      {(() => {
+                        const wiring = getTriggerWiring(selectedTrigger.slug);
+                        return (
+                          <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
+                            <p>
+                              <span className="font-semibold text-orange-200">Automation:</span> {wiring.detail}
+                            </p>
+                            {wiring.cadence && (
+                              <p className="mt-1">
+                                <span className="font-semibold text-orange-200">Cadence:</span> {wiring.cadence}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <p className="mt-3 text-xs text-slate-500">Version {selectedTemplate.version} · Recipient: {selectedTrigger.recipient_role}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -422,13 +450,27 @@ export default function EmailCmsDashboard({
                         </button>
                       </div>
                     </div>
+
+                    {showPreview && (
+                      <div className="overflow-hidden rounded-3xl border border-white/10 bg-white text-slate-900">
+                        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-600">Live preview</p>
+                          <p className="mt-2 text-sm font-semibold">{renderedPreview.subject}</p>
+                        </div>
+                        <iframe
+                          title="Email preview"
+                          srcDoc={renderedPreview.html}
+                          className="h-[640px] w-full bg-white"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-4">
-                    <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                    <div className="rounded-3xl border border-white/10 bg-white/5 p-5 xl:sticky xl:top-6">
                       <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-300">Variables</h3>
                       <p className="mt-2 text-sm text-slate-400">Click to insert placeholders into the template.</p>
-                      <div className="mt-4 space-y-2">
+                      <div className="mt-4 max-h-[70vh] space-y-2 overflow-y-auto">
                         {selectedTrigger.variables_schema.map((variable) => (
                           <button
                             key={variable.key}
@@ -442,20 +484,6 @@ export default function EmailCmsDashboard({
                         ))}
                       </div>
                     </div>
-
-                    {showPreview && (
-                      <div className="overflow-hidden rounded-3xl border border-white/10 bg-white text-slate-900">
-                        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-600">Live preview</p>
-                          <p className="mt-2 text-sm font-semibold">{renderedPreview.subject}</p>
-                        </div>
-                        <iframe
-                          title="Email preview"
-                          srcDoc={renderedPreview.html}
-                          className="h-[520px] w-full bg-white"
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
               </section>

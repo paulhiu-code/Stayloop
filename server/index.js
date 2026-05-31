@@ -1,5 +1,6 @@
 import express from 'express';
 import stripeRouter from '../routes/stripe.js';
+import accountRouter, { mountCronRoutes } from '../routes/account.js';
 import { authenticateUser } from './auth.js';
 import { handleStripeWebhook } from './webhook.js';
 
@@ -25,7 +26,10 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'stayloop-api' });
 });
 
+mountCronRoutes(app);
+
 app.use(authenticateUser);
+app.use(accountRouter);
 app.use(stripeRouter);
 
 app.use((err, _req, res, _next) => {

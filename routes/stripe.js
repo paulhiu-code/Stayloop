@@ -1,7 +1,7 @@
 import express from 'express';
 import Stripe from 'stripe';
 import pg from 'pg';
-import { confirmBookingAndSendEmails } from '../server/booking-emails.js';
+import { confirmBookingAndSendEmails, sendHostPayoutEmail } from '../server/booking-emails.js';
 
 const { Pool } = pg;
 
@@ -300,6 +300,12 @@ router.post('/api/bookings/:bookingId/release-payout', requireUser, async (req, 
 
     if (!rows[0]) {
       return res.status(404).json({ error: 'Booking not found for authenticated host' });
+    }
+
+    try {
+      await sendHostPayoutEmail(pool, bookingId);
+    } catch (emailError) {
+      console.error('Payout email failed:', emailError);
     }
 
     return res.json({ booking: rows[0] });

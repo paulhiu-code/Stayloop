@@ -64,6 +64,15 @@ Point Stripe webhooks at `POST /api/stripe/webhook`. On `payment_intent.succeede
 
 Never expose `STRIPE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in Vercel frontend environment variables.
 
+Schedule lifecycle emails (check-in reminders, review requests) by calling the API cron endpoint hourly:
+
+```bash
+curl -X POST "https://YOUR_API_HOST/api/cron/process-emails" \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+Set `CRON_SECRET` (or `EMAIL_CRON_SECRET`) on the Express API host. Booking lifecycle cadence follows Airbnb-style timing: pre-arrival 48 hours before check-in, day-of reminder on check-in date, review request 3 hours after checkout.
+
 ## Email (Resend) setup
 
 StayLoop sends transactional email through Resend via the `send-email` Supabase Edge Function.

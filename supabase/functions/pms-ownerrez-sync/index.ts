@@ -638,6 +638,8 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  let syncHostUserId: string | null = null;
+
   try {
     const supabase = createServiceSupabaseClient();
 
@@ -680,6 +682,8 @@ Deno.serve(async (req: Request) => {
     if (connError || !connection) {
       throw new Error('PMS connection not found');
     }
+
+    syncHostUserId = connection.user_id;
 
     const ownerRezToken = String(connection.oauth_access_token || connection.api_credentials?.access_token || '').trim();
     if (!ownerRezToken) {
@@ -790,6 +794,21 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     console.error('OwnerRez sync error:', error);
     const message = error instanceof Error ? error.message : String(error);
+
+    if (syncHostUserId) {
+      try {
+        const supabase = createServiceSupabaseClient();
+        const { notifyPmsSyncFailure } = await import('../_shared/email-notify.ts');
+        await notifyPmsSyncFailure(supabase, {
+          hostUserId: syncHostUserId,
+          pmsProvider: 'OwnerRez',
+          syncError: message,
+        });
+      } catch (notifyError) {
+        console.error('OwnerRez sync failure notification error:', notifyError);
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
