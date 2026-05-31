@@ -17,6 +17,8 @@ export type SearchFilters = {
   sort?: SearchSort;
   page?: number;
   pageSize?: number;
+  /** Hero/search category pill label (e.g. "Pet friendly"). */
+  category?: string;
 };
 
 export type SearchResultProperty = Property & {
@@ -356,9 +358,13 @@ export function applyCategoryPreset(category: string): Partial<SearchFilters> {
 /** Apply a category pill without treating the label as a location search. */
 export function applyCategoryToFilters(base: SearchFilters, category: string): SearchFilters {
   const preset = applyCategoryPreset(category);
+  if (!preset || Object.keys(preset).length === 0) {
+    return { ...base, page: 1 };
+  }
 
   return {
     page: 1,
+    category,
     guests: preset.guests ?? base.guests ?? 1,
     checkIn: base.checkIn,
     checkOut: base.checkOut,
@@ -370,6 +376,34 @@ export function applyCategoryToFilters(base: SearchFilters, category: string): S
     minPrice: undefined,
     maxPrice: undefined,
   };
+}
+
+export function searchHeading(filters: SearchFilters): string {
+  if (filters.category?.trim()) return filters.category.trim();
+  if (filters.where?.trim()) return filters.where.trim();
+  return 'All destinations';
+}
+
+export function clearCategoryIfManualEdit(previous: SearchFilters, next: SearchFilters): SearchFilters {
+  if (!previous.category) return next;
+
+  const manualEdit =
+    next.where !== previous.where ||
+    next.checkIn !== previous.checkIn ||
+    next.checkOut !== previous.checkOut ||
+    next.guests !== previous.guests ||
+    next.minPrice !== previous.minPrice ||
+    next.maxPrice !== previous.maxPrice ||
+    next.instantBook !== previous.instantBook ||
+    next.sort !== previous.sort ||
+    JSON.stringify(next.propertyTypes) !== JSON.stringify(previous.propertyTypes) ||
+    JSON.stringify(next.amenities) !== JSON.stringify(previous.amenities);
+
+  if (manualEdit && next.category === previous.category) {
+    return { ...next, category: undefined };
+  }
+
+  return next;
 }
 
 export function mergeSearchFilters(base: SearchFilters, patch: Partial<SearchFilters>): SearchFilters {

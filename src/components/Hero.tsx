@@ -1,8 +1,8 @@
 import { ReceiptText, ShieldCheck, SlidersHorizontal, Sparkles, Star } from 'lucide-react';
 import { useState } from 'react';
-import { applyCategoryToFilters, type SearchFilters } from '../lib/search';
-import { stayCategories } from '../data/showcase';
+import { applyCategoryToFilters, clearCategoryIfManualEdit, type SearchFilters } from '../lib/search';
 import SearchBar from './search/SearchBar';
+import CategoryPills from './search/CategoryPills';
 
 type HeroProps = {
   onSearch: (filters: SearchFilters) => void;
@@ -15,6 +15,10 @@ export default function Hero({ onSearch }: HeroProps) {
     const next = applyCategoryToFilters(filters, category);
     setFilters(next);
     onSearch(next);
+  }
+
+  function handleFiltersChange(next: SearchFilters) {
+    setFilters(clearCategoryIfManualEdit(filters, next));
   }
 
   return (
@@ -48,22 +52,16 @@ export default function Hero({ onSearch }: HeroProps) {
               variant="hero"
               className="mt-10 max-w-5xl"
               filters={filters}
-              onChange={setFilters}
+              onChange={handleFiltersChange}
               onSearch={() => onSearch(filters)}
             />
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              {stayCategories.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => handleCategory(category)}
-                  className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white backdrop-blur transition hover:border-orange-300 hover:bg-orange-400/20"
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
+            <CategoryPills
+              variant="hero"
+              className="mt-8"
+              activeCategory={filters.category}
+              onSelect={handleCategory}
+            />
           </div>
 
           <div className="relative">
