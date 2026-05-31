@@ -145,23 +145,29 @@ async function main() {
     if (!result.body?.success) throw new Error(result.body?.error || 'Calendar sync failed');
   }
 
-  console.log('\n── Bookings + cancellation policies (per property) ──');
+  console.log('\n── Cancellation policies (via property sync) ──');
+  const propertyResult = await invoke(accessToken, 'sync_properties');
+  console.log(
+    `Properties: HTTP ${propertyResult.status} in ${propertyResult.elapsedMs}ms`,
+    propertyResult.body?.success ? propertyResult.body.result : propertyResult.body?.error
+  );
+  if (!propertyResult.body?.success) {
+    throw new Error(propertyResult.body?.error || 'Property/cancellation sync failed');
+  }
+
+  console.log('\n── Reviews sync (per property) ──');
   for (const mapping of mappings || []) {
-    const result = await invoke(accessToken, 'sync_bookings', {
+    const reviewResult = await invoke(accessToken, 'sync_reviews', {
       propertyId: String(mapping.pms_property_id),
     });
     console.log(
-      `Bookings ${mapping.pms_property_id}: HTTP ${result.status} in ${result.elapsedMs}ms`,
-      result.body?.success ? result.body.result : result.body?.error
+      `Reviews ${mapping.pms_property_id}: HTTP ${reviewResult.status} in ${reviewResult.elapsedMs}ms`,
+      reviewResult.body?.success ? reviewResult.body.result : reviewResult.body?.error || reviewResult.body?.code
     );
-    if (!result.body?.success) throw new Error(result.body?.error || 'Booking sync failed');
+    if (!reviewResult.body?.success) {
+      throw new Error(reviewResult.body?.error || 'Review sync failed');
+    }
   }
-
-  console.log('\n── Reviews sync (all properties) ──');
-  const reviewResult = await invoke(accessToken, 'sync_reviews');
-  console.log(`Reviews: HTTP ${reviewResult.status} in ${reviewResult.elapsedMs}ms`);
-  console.log(JSON.stringify(reviewResult.body, null, 2));
-  if (!reviewResult.body?.success) throw new Error(reviewResult.body?.error || 'Review sync failed');
 
   await audit();
   console.log('\nDone.');
