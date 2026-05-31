@@ -35,7 +35,8 @@ VALUES (
     'reply_to', 'paul.hiu@gmail.com',
     'admin_recipients', jsonb_build_array(
       'alpha.media.solutions@outlook.com',
-      'paul.hiu@gmail.com'
+      'paul.hiu@gmail.com',
+      'info@playparkvacations.com'
     ),
     'from_name', 'StayLoop',
     'from_email', 'noreply@stay-loop.co'
