@@ -8,15 +8,19 @@ export type SitePage = 'home' | 'hosts' | 'partners' | 'host-onboarding' | 'host
 export default function Header({
   onShowAuth,
   onShowDashboard,
+  onShowAdmin,
   onNavigate,
   showHostLinks = false,
   showPartnerProgram = false,
+  showAdminLink = false,
 }: {
   onShowAuth: (mode?: AuthMode) => void;
   onShowDashboard: () => void;
+  onShowAdmin?: () => void;
   onNavigate?: (page: SitePage) => void;
   showHostLinks?: boolean;
   showPartnerProgram?: boolean;
+  showAdminLink?: boolean;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, profile, signOut } = useAuth();
@@ -59,6 +63,14 @@ export default function Header({
 
             {user ? (
               <div className="flex items-center gap-4">
+                {showAdminLink && onShowAdmin && (
+                  <button
+                    onClick={onShowAdmin}
+                    className="rounded-full border border-orange-200 bg-orange-50 px-4 py-2.5 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+                  >
+                    Admin
+                  </button>
+                )}
                 <button
                   onClick={onShowDashboard}
                   className="flex items-center gap-2 px-4 py-2.5 text-gray-700 hover:text-orange-600 font-semibold transition-colors duration-200 rounded-lg hover:bg-orange-50"
@@ -124,6 +136,17 @@ export default function Header({
               ))}
               {user ? (
                 <>
+                  {showAdminLink && onShowAdmin && (
+                    <button
+                      onClick={() => {
+                        onShowAdmin();
+                        setMobileMenuOpen(false);
+                      }}
+                      className="text-left font-semibold text-orange-700 transition hover:text-orange-800"
+                    >
+                      Admin
+                    </button>
+                  )}
                   <button
                     onClick={onShowDashboard}
                     className="text-left text-gray-700 hover:text-orange-600 font-medium transition"

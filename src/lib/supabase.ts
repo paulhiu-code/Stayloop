@@ -18,6 +18,7 @@ export type Profile = {
   phone: string | null;
   bio: string | null;
   is_verified: boolean;
+  is_admin: boolean;
   referred_by: string | null;
   referral_code: string;
   stripe_account_id: string | null;

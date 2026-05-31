@@ -10,6 +10,7 @@ import PartnersPage from './components/PartnersPage';
 import HostOnboarding from './components/HostOnboarding';
 import HostDashboard from './components/HostDashboard';
 import CheckoutPage from './components/CheckoutPage';
+import AdminDashboard from './components/AdminDashboard';
 import ResetPasswordPage from './components/ResetPasswordPage';
 import PropertyDetailPage from './components/PropertyDetailPage';
 import { supabase, Property } from './lib/supabase';
@@ -68,7 +69,8 @@ function propertyIdFromPath(path: string): string | null {
   return match?.[1] || null;
 }
 
-function pageFromPath(path: string): SitePage | 'reset-password' {
+function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' {
+  if (path === '/admin') return 'admin';
   if (path === '/reset-password') return 'reset-password';
   if (path === '/hosts') return 'hosts';
   if (path === '/partners') return 'partners';
@@ -95,13 +97,13 @@ function AppContent() {
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [showDashboard, setShowDashboard] = useState(false);
-  const [page, setPage] = useState<SitePage | 'reset-password'>(() => pageFromPath(window.location.pathname));
+  const [page, setPage] = useState<SitePage | 'reset-password' | 'admin'>(() => pageFromPath(window.location.pathname));
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [propertyId, setPropertyId] = useState<string | null>(() => propertyIdFromPath(window.location.pathname));
   const marketCarouselRef = useRef<HTMLDivElement>(null);
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isAdmin, profile } = useAuth();
 
   useEffect(() => {
     const handlePopState = () => {
@@ -149,8 +151,14 @@ function AppContent() {
     fetchProperties(query);
   }
 
-  function navigate(nextPage: SitePage, options?: { propertyId?: string; path?: string }) {
-    const path = options?.path || pathFromPage(nextPage, options?.propertyId);
+  function navigate(nextPage: SitePage | 'reset-password' | 'admin', options?: { propertyId?: string; path?: string }) {
+    const path =
+      options?.path ||
+      (nextPage === 'admin'
+        ? '/admin'
+        : nextPage === 'reset-password'
+        ? '/reset-password'
+        : pathFromPage(nextPage as SitePage, options?.propertyId));
     window.history.pushState({}, '', path);
     setPage(nextPage);
     if (nextPage === 'property' && options?.propertyId) {
@@ -193,6 +201,46 @@ function AppContent() {
         </div>
       </div>
     );
+  }
+
+  if (page === 'admin') {
+    if (!user) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-center text-white">
+          <div className="max-w-md rounded-3xl border border-white/10 bg-white/5 p-8">
+            <h1 className="text-2xl font-bold">Sign in required</h1>
+            <p className="mt-3 text-slate-300">Sign in with a StayLoop admin account to access this area.</p>
+            <button
+              type="button"
+              onClick={() => openAuth('signin')}
+              className="mt-6 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white"
+            >
+              Sign in
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (!isAdmin) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-center text-white">
+          <div className="max-w-md rounded-3xl border border-white/10 bg-white/5 p-8">
+            <h1 className="text-2xl font-bold">Admin access required</h1>
+            <p className="mt-3 text-slate-300">This area is limited to StayLoop admin accounts.</p>
+            <button
+              type="button"
+              onClick={() => navigate('home')}
+              className="mt-6 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white"
+            >
+              Back to homepage
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return <AdminDashboard onClose={() => navigate('home')} adminEmail={profile?.email} />;
   }
 
   if (page === 'reset-password') {
@@ -241,6 +289,8 @@ function AppContent() {
         onShowAuth={openAuth}
         onShowDashboard={() => setShowDashboard(true)}
         onNavigate={navigate}
+        onShowAdmin={() => navigate('admin')}
+        showAdminLink={isAdmin}
       />
 
       <Hero onSearch={handleSearch} />

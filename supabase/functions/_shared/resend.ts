@@ -40,8 +40,20 @@ export function getEmailReplyToAddress(): string | undefined {
   return (
     Deno.env.get('EMAIL_REPLY_TO') ??
     Deno.env.get('STAYLOOP_EMAIL_REPLY_TO') ??
-    undefined
+    'paul.hiu@gmail.com'
   );
+}
+
+export function getAdminEmailRecipients(): string[] {
+  const raw =
+    Deno.env.get('ADMIN_EMAIL_RECIPIENTS') ??
+    Deno.env.get('STAYLOOP_ADMIN_EMAIL_RECIPIENTS') ??
+    'alpha.media.solutions@outlook.com,paul.hiu@gmail.com';
+
+  return raw
+    .split(',')
+    .map((email) => email.trim())
+    .filter(Boolean);
 }
 
 export async function sendEmailViaResend(input: SendEmailInput): Promise<SendEmailResult> {

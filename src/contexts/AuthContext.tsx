@@ -13,6 +13,7 @@ type AuthContextType = {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
+  isAdmin: boolean;
   signUp: (email: string, password: string, fullName: string, userType: UserType, referralCode?: string) => Promise<SignUpResult>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithOAuth: (provider: OAuthProvider, userType?: UserType) => Promise<void>;
@@ -197,7 +198,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signInWithOAuth, resetPassword, updatePassword, signOut, updateUserType }}>
+    <AuthContext.Provider value={{
+      user,
+      profile,
+      loading,
+      isAdmin: Boolean(profile?.is_admin),
+      signUp,
+      signIn,
+      signInWithOAuth,
+      resetPassword,
+      updatePassword,
+      signOut,
+      updateUserType,
+    }}>
       {children}
     </AuthContext.Provider>
   );
