@@ -11,12 +11,11 @@ export type PmsSyncQueueRow = {
   entity_type: OutboundEntityType;
   entity_id: string | null;
   action: OutboundJobAction;
-  sync_direction: 'to_pms' | 'from_pms';
+  direction: 'to_pms' | 'from_pms';
   payload: Record<string, unknown>;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
   attempts: number;
-  max_attempts: number;
-  dry_run: boolean;
+  dry_run?: boolean;
 };
 
 export function isOwnerRezOutboundEnabled(): boolean {
@@ -24,30 +23,12 @@ export function isOwnerRezOutboundEnabled(): boolean {
   return flag === 'true' || flag === '1';
 }
 
-export function eachNight(checkIn: string, checkOut: string): string[] {
-  const nights: string[] = [];
-  const [startY, startM, startD] = checkIn.split('-').map(Number);
-  const [endY, endM, endD] = checkOut.split('-').map(Number);
-  const cursor = new Date(startY, startM - 1, startD);
-  const end = new Date(endY, endM - 1, endD);
-
-  while (cursor < end) {
-    const y = cursor.getFullYear();
-    const m = String(cursor.getMonth() + 1).padStart(2, '0');
-    const d = String(cursor.getDate()).padStart(2, '0');
-    nights.push(`${y}-${m}-${d}`);
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return nights;
-}
-
 export function buildOwnerRezOutboundPlan(
   job: PmsSyncQueueRow,
   provider: string
 ): Record<string, unknown> {
   const payload = job.payload || {};
-  const dryRun = job.dry_run || !isOwnerRezOutboundEnabled();
+  const dryRun = job.dry_run !== false && !isOwnerRezOutboundEnabled();
 
   if (provider !== 'ownerrez') {
     return {
@@ -114,8 +95,7 @@ export async function markQueueJobComplete(
       status: 'completed',
       dry_run: dryRun,
       result,
-      completed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      processed_at: new Date().toISOString(),
     })
     .eq('id', jobId);
 
@@ -134,9 +114,8 @@ export async function markQueueJobFailed(
     .update({
       status,
       attempts,
-      error_message: message,
-      updated_at: new Date().toISOString(),
-      scheduled_at:
+      last_error: message,
+      scheduled_for:
         status === 'pending'
           ? new Date(Date.now() + Math.min(attempts, 5) * 60_000).toISOString()
           : undefined,

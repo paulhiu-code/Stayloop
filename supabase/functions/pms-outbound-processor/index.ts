@@ -39,10 +39,9 @@ async function processJob(
   job: PmsSyncQueueRow,
   provider: string
 ) {
-  const startedAt = new Date().toISOString();
   await supabase
     .from('pms_sync_queue')
-    .update({ status: 'processing', started_at: startedAt, updated_at: startedAt })
+    .update({ status: 'processing' })
     .eq('id', job.id);
 
   const plan = buildOwnerRezOutboundPlan(job, provider);
@@ -92,10 +91,10 @@ Deno.serve(async (req: Request) => {
     let query = supabase
       .from('pms_sync_queue')
       .select('*')
-      .eq('sync_direction', 'to_pms')
+      .eq('direction', 'to_pms')
       .eq('status', 'pending')
-      .lte('scheduled_at', new Date().toISOString())
-      .order('scheduled_at', { ascending: true })
+      .lte('scheduled_for', new Date().toISOString())
+      .order('scheduled_for', { ascending: true })
       .limit(limit);
 
     if (connectionId) {

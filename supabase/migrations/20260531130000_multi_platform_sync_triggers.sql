@@ -1,28 +1,16 @@
 /*
-  Multi-platform sync infrastructure (StayLoop ↔ OwnerRez ↔ Airbnb/VRBO).
+  Multi-platform sync triggers + calendar blocks (delta on str_parity schema).
 
-  Adds outbound job queue, booking ID mappings, StayLoop-native calendar blocks,
-  and database triggers that enqueue OwnerRez push jobs without calling the API.
-  Outbound writes remain disabled until OWNERREZ_OUTBOUND_ENABLED=true on edge functions.
+  Adds StayLoop-native calendar blocking, booking lifecycle triggers, and
+  outbound queue dry-run support. Compatible with existing pms_sync_queue
+  columns (direction, scheduled_for, last_error, processed_at).
 */
 
 ALTER TABLE bookings
-  ADD COLUMN IF NOT EXISTS booking_source text NOT NULL DEFAULT 'stayloop'
-    CHECK (booking_source IN ('stayloop', 'ownerrez', 'guesty', 'airbnb', 'vrbo', 'other'));
-
-ALTER TABLE bookings
-  ADD COLUMN IF NOT EXISTS origin_platform text NOT NULL DEFAULT 'stayloop'
-    CHECK (origin_platform IN ('stayloop', 'ownerrez', 'airbnb', 'vrbo', 'guesty', 'other'));
-
-ALTER TABLE bookings
-  ADD COLUMN IF NOT EXISTS external_pms_booking_id text;
+  ADD COLUMN IF NOT EXISTS origin_platform text NOT NULL DEFAULT 'stayloop';
 
 ALTER TABLE bookings
   ADD COLUMN IF NOT EXISTS pms_connection_id uuid REFERENCES pms_connections(id) ON DELETE SET NULL;
-
-CREATE INDEX IF NOT EXISTS idx_bookings_external_pms
-  ON bookings(external_pms_booking_id)
-  WHERE external_pms_booking_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_bookings_pms_connection
   ON bookings(pms_connection_id)
@@ -39,87 +27,39 @@ CREATE INDEX IF NOT EXISTS idx_availability_blocked_by_booking
   ON availability_calendar(blocked_by_booking_id)
   WHERE blocked_by_booking_id IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS pms_sync_queue (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  pms_connection_id uuid NOT NULL REFERENCES pms_connections(id) ON DELETE CASCADE,
-  entity_type text NOT NULL CHECK (entity_type IN ('booking', 'availability', 'property', 'pricing')),
-  entity_id uuid,
-  action text NOT NULL CHECK (action IN ('create', 'update', 'cancel', 'block_dates', 'unblock_dates')),
-  sync_direction text NOT NULL DEFAULT 'to_pms' CHECK (sync_direction IN ('to_pms', 'from_pms')),
-  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-  status text NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'skipped')),
-  attempts integer NOT NULL DEFAULT 0,
-  max_attempts integer NOT NULL DEFAULT 5,
-  dry_run boolean NOT NULL DEFAULT true,
-  result jsonb,
-  error_message text,
-  scheduled_at timestamptz NOT NULL DEFAULT now(),
-  started_at timestamptz,
-  completed_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+ALTER TABLE pms_booking_mappings
+  ADD COLUMN IF NOT EXISTS pms_property_id text;
 
-CREATE INDEX IF NOT EXISTS idx_pms_sync_queue_pending
-  ON pms_sync_queue(status, scheduled_at)
-  WHERE status IN ('pending', 'processing');
+ALTER TABLE pms_booking_mappings
+  ADD COLUMN IF NOT EXISTS sync_direction text NOT NULL DEFAULT 'bidirectional';
 
-CREATE INDEX IF NOT EXISTS idx_pms_sync_queue_connection
-  ON pms_sync_queue(pms_connection_id, created_at DESC);
+ALTER TABLE pms_booking_mappings
+  ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
 
-CREATE TABLE IF NOT EXISTS pms_booking_mappings (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  pms_connection_id uuid NOT NULL REFERENCES pms_connections(id) ON DELETE CASCADE,
-  stayloop_booking_id uuid NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
-  pms_property_id text NOT NULL,
-  pms_booking_id text,
-  sync_direction text NOT NULL DEFAULT 'bidirectional'
-    CHECK (sync_direction IN ('to_pms', 'from_pms', 'bidirectional')),
-  sync_status text NOT NULL DEFAULT 'pending'
-    CHECK (sync_status IN ('pending', 'synced', 'failed', 'dry_run', 'skipped')),
-  last_synced_at timestamptz,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (pms_connection_id, stayloop_booking_id)
-);
+ALTER TABLE pms_booking_mappings
+  ALTER COLUMN pms_booking_id DROP NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_pms_booking_mappings_pms_id
-  ON pms_booking_mappings(pms_connection_id, pms_booking_id)
-  WHERE pms_booking_id IS NOT NULL;
+ALTER TABLE pms_sync_queue
+  ADD COLUMN IF NOT EXISTS dry_run boolean NOT NULL DEFAULT true;
 
-CREATE INDEX IF NOT EXISTS idx_pms_booking_mappings_stayloop
-  ON pms_booking_mappings(stayloop_booking_id);
+ALTER TABLE pms_sync_queue
+  ADD COLUMN IF NOT EXISTS result jsonb;
 
 UPDATE pms_connections
 SET sync_settings = COALESCE(sync_settings, '{}'::jsonb) || '{"outbound": false}'::jsonb
 WHERE sync_settings->>'outbound' IS NULL;
 
-ALTER TABLE pms_sync_queue ENABLE ROW LEVEL SECURITY;
-ALTER TABLE pms_booking_mappings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pms_booking_mappings DROP CONSTRAINT IF EXISTS pms_booking_mappings_sync_status_check;
+ALTER TABLE pms_booking_mappings ADD CONSTRAINT pms_booking_mappings_sync_status_check
+  CHECK (sync_status IN ('pending', 'synced', 'failed', 'conflict', 'dry_run', 'skipped'));
 
-DROP POLICY IF EXISTS "Users view own PMS sync queue" ON pms_sync_queue;
-CREATE POLICY "Users view own PMS sync queue"
-  ON pms_sync_queue FOR SELECT TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM pms_connections
-      WHERE pms_connections.id = pms_sync_queue.pms_connection_id
-        AND pms_connections.user_id = auth.uid()
-    )
-  );
+ALTER TABLE pms_sync_queue DROP CONSTRAINT IF EXISTS pms_sync_queue_action_check;
+ALTER TABLE pms_sync_queue ADD CONSTRAINT pms_sync_queue_action_check
+  CHECK (action IN ('create', 'update', 'cancel', 'sync', 'block_dates', 'unblock_dates'));
 
-DROP POLICY IF EXISTS "Users view own PMS booking mappings" ON pms_booking_mappings;
-CREATE POLICY "Users view own PMS booking mappings"
-  ON pms_booking_mappings FOR SELECT TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM pms_connections
-      WHERE pms_connections.id = pms_booking_mappings.pms_connection_id
-        AND pms_connections.user_id = auth.uid()
-    )
-  );
+ALTER TABLE pms_sync_queue DROP CONSTRAINT IF EXISTS pms_sync_queue_status_check;
+ALTER TABLE pms_sync_queue ADD CONSTRAINT pms_sync_queue_status_check
+  CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'skipped'));
 
 CREATE OR REPLACE FUNCTION public.pms_booking_is_blocking(status text)
 RETURNS boolean
@@ -204,7 +144,7 @@ BEGIN
     entity_type,
     entity_id,
     action,
-    sync_direction,
+    direction,
     payload,
     dry_run
   )
@@ -280,6 +220,7 @@ BEGIN
       pms_connection_id,
       stayloop_booking_id,
       pms_property_id,
+      pms_booking_id,
       sync_direction,
       sync_status,
       metadata
@@ -288,6 +229,7 @@ BEGIN
       mapping.pms_connection_id,
       NEW.id,
       mapping.pms_property_id,
+      NULL,
       'bidirectional',
       'pending',
       jsonb_build_object(
@@ -297,6 +239,7 @@ BEGIN
       )
     )
     ON CONFLICT (pms_connection_id, stayloop_booking_id) DO UPDATE SET
+      pms_property_id = EXCLUDED.pms_property_id,
       sync_status = CASE
         WHEN pms_booking_mappings.sync_status = 'synced' THEN pms_booking_mappings.sync_status
         ELSE 'pending'
