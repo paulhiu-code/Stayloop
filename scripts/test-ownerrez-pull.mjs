@@ -226,10 +226,17 @@ async function main() {
   console.log(`Host user: ${connection.user_id}`);
   console.log(`Last sync: ${connection.last_sync_at || 'never'}\n`);
 
+  const { data: mappings, error: mappingsError } = await admin
+    .from('pms_property_mappings')
+    .select('pms_property_id, stayloop_property_id')
+    .eq('pms_connection_id', connectionId);
+
+  if (mappingsError) throw mappingsError;
+
   const accessToken = await getHostAccessToken(connection.user_id);
   console.log('Host session acquired\n');
 
-  for (const action of ['sync_properties', 'sync_bookings', 'sync_all']) {
+  for (const action of ['sync_properties', 'sync_bookings']) {
     console.log(`── Invoking ${action} ──`);
     const result = await invokeSync(accessToken, action);
     console.log(`HTTP ${result.status} in ${result.elapsedMs}ms`);
@@ -239,6 +246,23 @@ async function main() {
     }
     console.log('');
   }
+
+  console.log('── Invoking sync_availability per property ──');
+  for (const mapping of mappings || []) {
+    const result = await invokeSync(accessToken, 'sync_availability', {
+      propertyId: String(mapping.pms_property_id),
+    });
+    console.log(
+      `Property ${mapping.pms_property_id}: HTTP ${result.status} in ${result.elapsedMs}ms`,
+      result.body?.success ? 'ok' : result.body?.error || result.body
+    );
+    if (!result.body?.success) {
+      throw new Error(
+        `sync_availability failed for ${mapping.pms_property_id}: ${result.body?.error || 'unknown error'}`
+      );
+    }
+  }
+  console.log('');
 
   await auditResults();
   console.log('\nDone — pull-only sync completed (no OwnerRez writes).');

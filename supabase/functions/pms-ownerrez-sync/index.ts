@@ -1063,19 +1063,7 @@ async function syncProperties(supabase: any, connection: any, token: string) {
         });
       }
 
-      if (stayloopPropertyId) {
-        try {
-          await syncOwnerRezPricingAndCalendar(
-            supabase,
-            connection,
-            token,
-            pmsPropertyId,
-            stayloopPropertyId
-          );
-        } catch (pricingError) {
-          console.error(`Pricing sync failed for property ${pmsPropertyId}:`, pricingError);
-        }
-      }
+      // Calendar/pricing runs via sync_all or sync_availability to avoid worker timeouts.
 
       succeeded++;
     } catch (error) {
