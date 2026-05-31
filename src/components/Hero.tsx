@@ -1,14 +1,27 @@
-import { CalendarDays, ReceiptText, Search, ShieldCheck, SlidersHorizontal, Sparkles, Star, Users } from 'lucide-react';
+import { ReceiptText, ShieldCheck, SlidersHorizontal, Sparkles, Star } from 'lucide-react';
 import { useState } from 'react';
+import { applyCategoryPreset, type SearchFilters } from '../lib/search';
 import { stayCategories } from '../data/showcase';
+import SearchBar from './search/SearchBar';
 
-export default function Hero({ onSearch }: { onSearch: (query: string) => void }) {
-  const [searchQuery, setSearchQuery] = useState('');
+type HeroProps = {
+  onSearch: (filters: SearchFilters) => void;
+};
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSearch(searchQuery);
-  };
+export default function Hero({ onSearch }: HeroProps) {
+  const [filters, setFilters] = useState<SearchFilters>({ guests: 1 });
+
+  function handleCategory(category: string) {
+    const preset = applyCategoryPreset(category);
+    const next: SearchFilters = {
+      ...filters,
+      ...preset,
+      where: preset.where ?? category,
+      guests: preset.guests ?? filters.guests ?? 1,
+    };
+    setFilters(next);
+    onSearch(next);
+  }
 
   return (
     <section className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-orange-950 overflow-hidden text-white">
@@ -37,90 +50,20 @@ export default function Hero({ onSearch }: { onSearch: (query: string) => void }
               StayLoop helps travelers compare homes, hotel rooms, cabins, and unique stays with upfront pricing and real booking support.
             </p>
 
-            <form onSubmit={handleSubmit} className="mt-10 max-w-5xl">
-              <div className="rounded-[2rem] border border-white/40 bg-white/95 p-2 shadow-2xl shadow-slate-950/25 backdrop-blur-xl">
-                <div className="grid items-stretch overflow-hidden rounded-[1.5rem] md:grid-cols-[1.35fr_auto_0.9fr_auto_0.8fr_auto_auto]">
-                  <label className="group flex cursor-text items-center gap-3 px-5 py-3 text-left text-slate-950 transition hover:bg-slate-50">
-                    <Search className="h-3.5 w-3.5 text-orange-600" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[0.68rem] font-extrabold uppercase tracking-[0.22em] text-slate-500">
-                        Where
-                      </span>
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Where to?"
-                        className="mt-1 w-full bg-transparent text-[0.95rem] font-semibold text-slate-950 outline-none placeholder:text-slate-500"
-                      />
-                    </span>
-                  </label>
-
-                  <div
-                    className="hidden h-11 self-center md:block"
-                    style={{ width: '1px', backgroundColor: '#cbd5e1' }}
-                    aria-hidden="true"
-                  ></div>
-
-                  <button
-                    type="button"
-                    className="flex items-center gap-3 border-t border-slate-200 px-5 py-3 text-left text-slate-950 transition hover:bg-slate-50 md:border-t-0"
-                  >
-                    <CalendarDays className="h-3.5 w-3.5 text-orange-600" />
-                    <span>
-                      <span className="block text-[0.68rem] font-extrabold uppercase tracking-[0.22em] text-slate-500">
-                        Dates
-                      </span>
-                      <span className="mt-1 block text-[0.95rem] font-semibold">Add dates</span>
-                    </span>
-                  </button>
-
-                  <div
-                    className="hidden h-11 self-center md:block"
-                    style={{ width: '1px', backgroundColor: '#cbd5e1' }}
-                    aria-hidden="true"
-                  ></div>
-
-                  <button
-                    type="button"
-                    className="flex items-center gap-3 border-t border-slate-200 px-5 py-3 text-left text-slate-950 transition hover:bg-slate-50 md:border-t-0"
-                  >
-                    <Users className="h-3.5 w-3.5 text-orange-600" />
-                    <span>
-                      <span className="block text-[0.68rem] font-extrabold uppercase tracking-[0.22em] text-slate-500">
-                        Guests
-                      </span>
-                      <span className="mt-1 block text-[0.95rem] font-semibold">Add guests</span>
-                    </span>
-                  </button>
-
-                  <div
-                    className="hidden h-11 self-center md:block"
-                    style={{ width: '1px', backgroundColor: '#cbd5e1' }}
-                    aria-hidden="true"
-                  ></div>
-
-                  <div className="border-t border-slate-200 p-2 md:border-t-0">
-                    <button
-                      type="submit"
-                      className="flex h-full min-h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-6 text-base font-extrabold text-white shadow-lg shadow-orange-500/25 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl md:w-auto"
-                    >
-                      <Search className="h-4 w-4" />
-                      Search
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </form>
+            <SearchBar
+              variant="hero"
+              className="mt-10 max-w-5xl"
+              filters={filters}
+              onChange={setFilters}
+              onSearch={() => onSearch(filters)}
+            />
 
             <div className="mt-8 flex flex-wrap gap-3">
               {stayCategories.map((category) => (
                 <button
                   key={category}
-                  onClick={() => {
-                    setSearchQuery(category);
-                    onSearch(category);
-                  }}
+                  type="button"
+                  onClick={() => handleCategory(category)}
                   className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white backdrop-blur transition hover:border-orange-300 hover:bg-orange-400/20"
                 >
                   {category}

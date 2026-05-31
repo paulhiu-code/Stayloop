@@ -359,12 +359,14 @@ async function syncCalendar(supabase: any, connection: any, baseUrl: string, tok
     processed++;
     try {
       await supabase
-        .from('property_availability')
+        .from('availability_calendar')
         .upsert({
           property_id: mapping.stayloop_property_id,
           date: day.date,
           is_available: day.status === 'available',
           price_override: day.price,
+          source: 'guesty',
+          synced_at: new Date().toISOString(),
         }, {
           onConflict: 'property_id,date',
         });
