@@ -226,7 +226,7 @@ function AppContent() {
   }
 
   if (showDashboard) {
-    return <Dashboard onClose={() => setShowDashboard(false)} />;
+    return <Dashboard onClose={() => setShowDashboard(false)} onNavigate={navigate} />;
   }
 
   return (
