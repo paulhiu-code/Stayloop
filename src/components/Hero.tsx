@@ -1,6 +1,6 @@
 import { ReceiptText, ShieldCheck, SlidersHorizontal, Sparkles, Star } from 'lucide-react';
 import { useState } from 'react';
-import { applyCategoryPreset, type SearchFilters } from '../lib/search';
+import { applyCategoryToFilters, type SearchFilters } from '../lib/search';
 import { stayCategories } from '../data/showcase';
 import SearchBar from './search/SearchBar';
 
@@ -12,13 +12,7 @@ export default function Hero({ onSearch }: HeroProps) {
   const [filters, setFilters] = useState<SearchFilters>({ guests: 1 });
 
   function handleCategory(category: string) {
-    const preset = applyCategoryPreset(category);
-    const next: SearchFilters = {
-      ...filters,
-      ...preset,
-      where: preset.where ?? category,
-      guests: preset.guests ?? filters.guests ?? 1,
-    };
+    const next = applyCategoryToFilters(filters, category);
     setFilters(next);
     onSearch(next);
   }

@@ -1,7 +1,12 @@
 import { Loader2, MapPin, SearchX, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { stayCategories } from '../../data/showcase';
-import { applyCategoryPreset, searchProperties, type SearchFilters, type SearchResultProperty } from '../../lib/search';
+import {
+  applyCategoryToFilters,
+  searchProperties,
+  type SearchFilters,
+  type SearchResultProperty,
+} from '../../lib/search';
 import { buildSearchPath, parseSearchParams } from '../../lib/searchUrl';
 import Header from '../Header';
 import PropertyCard from '../PropertyCard';
@@ -90,13 +95,7 @@ export default function SearchResultsPage({
   }
 
   function applyCategory(category: string) {
-    const preset = applyCategoryPreset(category);
-    const nextFilters = {
-      ...draftFilters,
-      ...preset,
-      where: preset.where ?? category,
-      page: 1,
-    };
+    const nextFilters = applyCategoryToFilters(draftFilters, category);
     setDraftFilters(nextFilters);
     setActiveFilters(nextFilters);
   }

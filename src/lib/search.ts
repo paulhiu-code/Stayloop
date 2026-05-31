@@ -71,34 +71,32 @@ export const COMMON_AMENITIES = [
   'Grill',
 ] as const;
 
+/** Maps hero/search category pills to filters that match OwnerRez/PMS amenity strings in our DB. */
 export const CATEGORY_PRESETS: Record<(typeof stayCategories)[number], Partial<SearchFilters>> = {
-  'Beach houses': {
-    where: 'beach',
-    amenities: ['Beachfront'],
-    propertyTypes: ['house', 'condo'],
+  'Entire homes': {
+    amenities: ['Entire Home'],
   },
-  'Unique stays': {
-    propertyTypes: ['loft', 'other'],
+  'Pet friendly': {
+    amenities: ['Allows pets'],
   },
-  'Hotel rooms': {
-    propertyTypes: ['apartment', 'loft'],
-    where: 'hotel',
+  'Family homes': {
+    propertyTypes: ['house'],
+    guests: 4,
+  },
+  'Work trips': {
+    amenities: ['Internet'],
+  },
+  'Hot tub stays': {
+    amenities: ['Hot Tub'],
   },
   Cabins: {
     propertyTypes: ['cabin', 'cottage'],
   },
-  'Pet friendly': {
-    amenities: ['Pet friendly'],
+  'Mountain stays': {
+    amenities: ['Mountain'],
   },
-  'Work trips': {
-    amenities: ['Fast Wi-Fi', 'Workspace', 'Office'],
-  },
-  'Family homes': {
-    propertyTypes: ['house', 'townhouse'],
-    guests: 4,
-  },
-  'Instant book': {
-    instantBook: true,
+  'Beach houses': {
+    amenities: ['Oceanfront'],
   },
 };
 
@@ -352,7 +350,26 @@ export async function searchProperties(filters: SearchFilters = {}): Promise<Sea
 }
 
 export function applyCategoryPreset(category: string): Partial<SearchFilters> {
-  return CATEGORY_PRESETS[category as keyof typeof CATEGORY_PRESETS] || { where: category };
+  return CATEGORY_PRESETS[category as keyof typeof CATEGORY_PRESETS] || {};
+}
+
+/** Apply a category pill without treating the label as a location search. */
+export function applyCategoryToFilters(base: SearchFilters, category: string): SearchFilters {
+  const preset = applyCategoryPreset(category);
+
+  return {
+    page: 1,
+    guests: preset.guests ?? base.guests ?? 1,
+    checkIn: base.checkIn,
+    checkOut: base.checkOut,
+    sort: base.sort,
+    where: preset.where,
+    propertyTypes: preset.propertyTypes,
+    amenities: preset.amenities,
+    instantBook: preset.instantBook,
+    minPrice: undefined,
+    maxPrice: undefined,
+  };
 }
 
 export function mergeSearchFilters(base: SearchFilters, patch: Partial<SearchFilters>): SearchFilters {
