@@ -15,6 +15,9 @@ import ResetPasswordPage from './components/ResetPasswordPage';
 import PropertyDetailPage from './components/PropertyDetailPage';
 import { supabase, Property } from './lib/supabase';
 import { showcaseProperties } from './data/showcase';
+import { searchProperties, type SearchFilters } from './lib/search';
+import { buildSearchPath, parseSearchParams } from './lib/searchUrl';
+import SearchResultsPage from './components/search/SearchResultsPage';
 
 const featuredMarkets = [
   {
@@ -72,6 +75,7 @@ function propertyIdFromPath(path: string): string | null {
 function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' {
   if (path === '/admin') return 'admin';
   if (path === '/reset-password') return 'reset-password';
+  if (path === '/search' || path.startsWith('/search/')) return 'search';
   if (path === '/hosts') return 'hosts';
   if (path === '/partners') return 'partners';
   if (path === '/host-onboarding') return 'host-onboarding';
@@ -81,7 +85,16 @@ function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' {
   return 'home';
 }
 
-function pathFromPage(page: SitePage, propertyId?: string) {
+function pathFromPage(
+  page: SitePage | 'reset-password' | 'admin',
+  propertyId?: string,
+  searchQuery?: string
+) {
+  if (page === 'admin') return '/admin';
+  if (page === 'reset-password') return '/reset-password';
+  if (page === 'search') {
+    return searchQuery ? `/search?${searchQuery}` : '/search';
+  }
   if (page === 'hosts') return '/hosts';
   if (page === 'partners') return '/partners';
   if (page === 'host-onboarding') return '/host-onboarding';
@@ -100,7 +113,6 @@ function AppContent() {
   const [page, setPage] = useState<SitePage | 'reset-password' | 'admin'>(() => pageFromPath(window.location.pathname));
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [propertyId, setPropertyId] = useState<string | null>(() => propertyIdFromPath(window.location.pathname));
   const marketCarouselRef = useRef<HTMLDivElement>(null);
   const { user, loading: authLoading, isAdmin, profile } = useAuth();
@@ -116,39 +128,45 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    fetchProperties();
-  }, []);
+    if (page === 'home') {
+      fetchFeaturedProperties();
+    }
+  }, [page]);
 
-  async function fetchProperties(query?: string) {
+  function goToSearch(filters: SearchFilters) {
+    const path = buildSearchPath({ ...filters, page: 1 });
+    window.history.pushState({}, '', path);
+    setPage('search');
+    setPropertyId(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function viewProperty(id: string) {
+    navigate('property', { propertyId: id });
+  }
+
+  async function fetchFeaturedProperties() {
     setLoading(true);
     try {
-      let queryBuilder = supabase
-        .from('properties')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(12);
-
-      if (query) {
-        queryBuilder = queryBuilder.or(
-          `title.ilike.%${query}%,city.ilike.%${query}%,state.ilike.%${query}%,description.ilike.%${query}%`
-        );
-      }
-
-      const { data, error } = await queryBuilder;
-
-      if (error) throw error;
-      setProperties(data || []);
+      const result = await searchProperties({ page: 1, pageSize: 12, sort: 'recommended' });
+      setProperties(result.properties);
     } catch (error) {
       console.error('Error fetching properties:', error);
+      try {
+        const { data, error: fallbackError } = await supabase
+          .from('properties')
+          .select('*')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(12);
+        if (fallbackError) throw fallbackError;
+        setProperties(data || []);
+      } catch (fallbackErr) {
+        console.error('Fallback fetch failed:', fallbackErr);
+      }
     } finally {
       setLoading(false);
     }
-  }
-
-  function handleSearch(query: string) {
-    setSearchQuery(query);
-    fetchProperties(query);
   }
 
   function navigate(nextPage: SitePage | 'reset-password' | 'admin', options?: { propertyId?: string; path?: string }) {
@@ -157,8 +175,8 @@ function AppContent() {
       (nextPage === 'admin'
         ? '/admin'
         : nextPage === 'reset-password'
-        ? '/reset-password'
-        : pathFromPage(nextPage as SitePage, options?.propertyId));
+          ? '/reset-password'
+          : pathFromPage(nextPage, options?.propertyId));
     window.history.pushState({}, '', path);
     setPage(nextPage);
     if (nextPage === 'property' && options?.propertyId) {
@@ -167,10 +185,6 @@ function AppContent() {
       setPropertyId(null);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  function viewProperty(id: string) {
-    navigate('property', { propertyId: id });
   }
 
   function goToCheckout(path: string) {
@@ -267,6 +281,20 @@ function AppContent() {
     return <CheckoutPage onClose={() => navigate('home')} />;
   }
 
+  if (page === 'search') {
+    return (
+      <>
+        <SearchResultsPage
+          onViewStay={viewProperty}
+          onNavigateHome={() => navigate('home')}
+          onShowAuth={() => openAuth('signin')}
+          initialFilters={parseSearchParams(window.location.search)}
+        />
+        {showAuth && <AuthModal onClose={() => setShowAuth(false)} initialMode={authMode} />}
+      </>
+    );
+  }
+
   if (page === 'property' && propertyId) {
     return (
       <PropertyDetailPage
@@ -293,23 +321,28 @@ function AppContent() {
         showAdminLink={isAdmin}
       />
 
-      <Hero onSearch={handleSearch} />
+      <Hero onSearch={goToSearch} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="flex items-center justify-between mb-8">
           <div>
             <p className="mb-3 text-sm font-bold uppercase tracking-[0.24em] text-orange-600">
-              {searchQuery ? 'Search results' : 'Featured stays'}
+              Featured stays
             </p>
             <h2 className="text-4xl font-extrabold text-gray-900 mb-2">
-              {searchQuery ? `Places matching "${searchQuery}"` : 'Curated places guests can book next'}
+              Curated places guests can book next
             </h2>
             <p className="text-gray-600">
-              {searchQuery
-                ? `Found ${properties.length} properties`
-                : 'Entire homes, hotel rooms, cabins, and unique stays with a professional booking flow.'}
+              Entire homes, hotel rooms, cabins, and unique stays with a professional booking flow.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => goToSearch({ guests: 1 })}
+            className="hidden rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:from-orange-600 hover:to-rose-600 md:inline-flex"
+          >
+            Search all stays
+          </button>
         </div>
 
         {loading ? (
@@ -328,28 +361,11 @@ function AppContent() {
               <PropertyCard key={property.id} property={property} onViewStay={viewProperty} />
             ))}
           </div>
-        ) : !searchQuery ? (
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {showcaseProperties.map((property) => (
-              <PropertyCard key={property.id} property={property} onViewStay={viewProperty} />
+              <PropertyCard key={property.id} property={property} />
             ))}
-          </div>
-        ) : (
-          <div className="text-center py-20">
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">No properties found</h3>
-            <p className="text-gray-600 mb-8">
-              {searchQuery
-                ? 'Try adjusting your search criteria'
-                : 'Be the first to list a property'}
-            </p>
-            {!searchQuery && (
-              <button
-                onClick={() => setShowAuth(true)}
-                className="px-8 py-4 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-lg hover:shadow-xl"
-              >
-                Become a Host
-              </button>
-            )}
           </div>
         )}
       </main>
@@ -391,7 +407,7 @@ function AppContent() {
             {featuredMarkets.map((market) => (
               <button
                 key={market.title}
-                onClick={() => handleSearch(market.title)}
+                onClick={() => goToSearch({ where: market.title, guests: 1 })}
                 className="group min-w-[260px] snap-start overflow-hidden rounded-[2rem] bg-gray-950 text-left shadow-xl transition hover:-translate-y-1 hover:shadow-2xl sm:min-w-[320px]"
               >
                 <div className="relative h-72 overflow-hidden">
@@ -483,7 +499,7 @@ function AppContent() {
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
+                  <button onClick={() => goToSearch({ guests: 1 })} className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
                     Search stays
                   </button>
                 </li>

@@ -4,7 +4,25 @@ import type { ShowcaseProperty } from '../data/showcase';
 
 type PropertyCardData = Property | ShowcaseProperty;
 
-function getPropertyMeta(property: PropertyCardData) {
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type PropertyCardSearchContext = {
+  totalPrice?: number;
+  nights?: number;
+  avgRating?: number;
+  reviewCount?: number;
+};
+
+function getPropertyMeta(property: PropertyCardData, searchContext?: PropertyCardSearchContext) {
+  if (searchContext?.avgRating != null || searchContext?.reviewCount != null) {
+    return {
+      rating: searchContext.avgRating ?? 4.9,
+      reviewCount: searchContext.reviewCount ?? 0,
+      collection: 'rating' in property ? property.collection : property.property_type.replace(/_/g, ' '),
+      badges: 'badges' in property ? property.badges : property.is_active ? ['Verified'] : [],
+    };
+  }
+
   if ('rating' in property) {
     return {
       rating: property.rating,
@@ -25,13 +43,16 @@ function getPropertyMeta(property: PropertyCardData) {
 export default function PropertyCard({
   property,
   onViewStay,
+  searchContext,
 }: {
   property: PropertyCardData;
   onViewStay?: (propertyId: string) => void;
+  searchContext?: PropertyCardSearchContext;
 }) {
   const mainImage = property.images[0] || 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=1200';
-  const meta = getPropertyMeta(property);
-  const canNavigate = 'host_id' in property && Boolean(onViewStay);
+  const meta = getPropertyMeta(property, searchContext);
+  const canNavigate = UUID_PATTERN.test(property.id) && Boolean(onViewStay);
+  const showStayTotal = searchContext?.totalPrice != null && searchContext.nights != null && searchContext.nights > 0;
 
   return (
     <article
@@ -131,10 +152,24 @@ export default function PropertyCard({
 
         <div className="flex items-center justify-between pt-5 border-t border-gray-200">
           <div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-gray-900">${property.base_price}</span>
-              <span className="text-sm text-gray-500 font-medium">/ night</span>
-            </div>
+            {showStayTotal ? (
+              <>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-bold text-gray-900">
+                    ${Math.round(searchContext!.totalPrice!)}
+                  </span>
+                  <span className="text-sm text-gray-500 font-medium">
+                    total · {searchContext!.nights} night{searchContext!.nights === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-gray-500">${property.base_price} / night</p>
+              </>
+            ) : (
+              <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-bold text-gray-900">${property.base_price}</span>
+                <span className="text-sm text-gray-500 font-medium">/ night</span>
+              </div>
+            )}
           </div>
           <button
             type="button"

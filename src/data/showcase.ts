@@ -221,15 +221,15 @@ export const showcaseProperties: ShowcaseProperty[] = [
 ];
 
 export const stayCategories = [
-  'Beach houses',
-  'Unique stays',
-  'Hotel rooms',
-  'Cabins',
+  'Entire homes',
   'Pet friendly',
-  'Work trips',
   'Family homes',
-  'Instant book',
-];
+  'Work trips',
+  'Hot tub stays',
+  'Cabins',
+  'Mountain stays',
+  'Beach houses',
+] as const;
 
 export const brandNameIdeas = [
   'Stayloop.com',
