@@ -10,16 +10,20 @@ import {
   Check,
   Network,
   ArrowRight,
+  Mail,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
+import EmailCmsDashboard from './admin/EmailCmsDashboard';
 import PMSSettings from './PMSSettings';
 
 type DashboardTab = 'overview' | 'properties' | 'bookings' | 'referrals' | 'pms';
 type DashboardMode = 'guest' | 'host';
+type AdminView = 'main' | 'email-cms';
 
 export default function Dashboard({ onClose }: { onClose: () => void }) {
-  const { profile, updateUserType } = useAuth();
+  const { profile, updateUserType, isAdmin } = useAuth();
+  const [adminView, setAdminView] = useState<AdminView>('main');
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [dashboardMode, setDashboardMode] = useState<DashboardMode>('guest');
   const [copied, setCopied] = useState(false);
@@ -143,7 +147,41 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {dashboardMode === 'guest' ? (
+          {isAdmin && (
+            <div className="mb-8 rounded-2xl border border-orange-200 bg-gradient-to-r from-orange-50 to-white p-2 shadow-sm">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAdminView('main')}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-bold transition ${
+                    adminView === 'main'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  My dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdminView('email-cms')}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${
+                    adminView === 'email-cms'
+                      ? 'bg-orange-500 text-white shadow-sm'
+                      : 'text-orange-700 hover:bg-orange-100'
+                  }`}
+                >
+                  <Mail className="h-4 w-4" />
+                  Email CMS
+                </button>
+              </div>
+            </div>
+          )}
+
+          {adminView === 'email-cms' && isAdmin ? (
+            <div className="-mx-4 overflow-hidden rounded-3xl border border-slate-800 sm:mx-0">
+              <EmailCmsDashboard embedded onClose={() => setAdminView('main')} />
+            </div>
+          ) : dashboardMode === 'guest' ? (
             <div className="space-y-8">
               <div className="rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-white shadow-xl">
                 <div className="max-w-3xl">

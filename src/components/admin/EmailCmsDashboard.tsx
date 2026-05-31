@@ -27,7 +27,13 @@ import { supabase } from '../../lib/supabase';
 
 type TabId = 'templates' | 'sequences' | 'logs';
 
-export default function EmailCmsDashboard({ onClose }: { onClose: () => void }) {
+export default function EmailCmsDashboard({
+  onClose,
+  embedded = false,
+}: {
+  onClose: () => void;
+  embedded?: boolean;
+}) {
   const { profile, user } = useAuth();
   const [tab, setTab] = useState<TabId>('templates');
   const [triggers, setTriggers] = useState<EmailTriggerWithTemplate[]>([]);
@@ -214,7 +220,7 @@ export default function EmailCmsDashboard({ onClose }: { onClose: () => void }) 
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className={`${embedded ? 'min-h-0' : 'min-h-screen'} bg-slate-950 text-white`}>
       <div className="border-b border-white/10 bg-slate-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
@@ -222,14 +228,16 @@ export default function EmailCmsDashboard({ onClose }: { onClose: () => void }) 
             <h1 className="mt-2 text-3xl font-extrabold">Email CMS</h1>
             <p className="mt-1 text-sm text-slate-400">Edit transactional templates, preview with sample data, and send tests.</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to site
-          </button>
+          {!embedded && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to site
+            </button>
+          )}
         </div>
         <div className="mx-auto flex max-w-7xl gap-2 px-4 pb-4 sm:px-6">
           {([
