@@ -26,6 +26,7 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
   const [earnings, setEarnings] = useState<ReferralEarning[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [guestBookings, setGuestBookings] = useState<Booking[]>([]);
   const [stats, setStats] = useState({
     totalEarnings: 0,
     pendingEarnings: 0,
@@ -46,16 +47,18 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
   async function fetchDashboardData() {
     if (!profile) return;
 
-    const [earningsRes, propertiesRes, bookingsRes, referralsRes] = await Promise.all([
+    const [earningsRes, propertiesRes, bookingsRes, guestBookingsRes, referralsRes] = await Promise.all([
       supabase.from('referral_earnings').select('*').eq('earner_id', profile.id),
       supabase.from('properties').select('*').eq('host_id', profile.id),
-      supabase.from('bookings').select('*').eq('host_id', profile.id),
+      supabase.from('bookings').select('*').eq('host_id', profile.id).order('check_in', { ascending: false }),
+      supabase.from('bookings').select('*').eq('guest_id', profile.id).order('check_in', { ascending: false }),
       supabase.from('profiles').select('id').eq('referred_by', profile.id),
     ]);
 
     if (earningsRes.data) setEarnings(earningsRes.data);
     if (propertiesRes.data) setProperties(propertiesRes.data);
     if (bookingsRes.data) setBookings(bookingsRes.data);
+    if (guestBookingsRes.data) setGuestBookings(guestBookingsRes.data);
 
     const totalEarnings = earningsRes.data?.reduce((sum, e) => sum + Number(e.commission_amount), 0) || 0;
     const pendingEarnings = earningsRes.data?.filter((e) => e.status === 'pending').reduce((sum, e) => sum + Number(e.commission_amount), 0) || 0;
@@ -151,23 +154,58 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
                     Guest mode
                   </p>
                   <h2 className="text-4xl font-extrabold tracking-tight">
-                    Plan trips, save stays, and come back when you are ready to book.
+                    Your trips and reservations
                   </h2>
                   <p className="mt-4 text-lg leading-8 text-slate-300">
-                    Your guest dashboard will hold saved stays, upcoming trips, messages, and booking details as StayLoop grows.
+                    Upcoming and past stays booked through StayLoop appear here.
                   </p>
                 </div>
               </div>
 
-              <div className="grid gap-6 md:grid-cols-3">
+              <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                <h3 className="text-xl font-extrabold text-gray-900">Your bookings</h3>
+                {guestBookings.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <Calendar className="mx-auto mb-4 h-12 w-12 text-gray-300" />
+                    <p className="text-gray-500">No trips yet. Explore stays and book your next getaway.</p>
+                  </div>
+                ) : (
+                  <div className="mt-6 space-y-4">
+                    {guestBookings.map((booking) => (
+                      <div
+                        key={booking.id}
+                        className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-gray-50 p-5"
+                      >
+                        <div>
+                          <p className="font-bold text-gray-900">
+                            {booking.check_in} → {booking.check_out}
+                          </p>
+                          <p className="mt-1 text-sm capitalize text-gray-500">
+                            {booking.status} · {booking.num_guests} guest{booking.num_guests === 1 ? '' : 's'} ·{' '}
+                            {booking.total_nights} night{booking.total_nights === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-extrabold text-gray-900">
+                            ${Number(booking.total_amount).toFixed(2)}
+                          </p>
+                          <p className="text-xs text-gray-500">Total paid</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-2">
                 {[
                   ['Saved stays', 'Shortlist homes, cabins, beach houses, and city stays you want to revisit.'],
-                  ['Upcoming trips', 'Keep reservation details, check-in notes, and support in one place.'],
                   ['Messages', 'Stay connected with hosts before and during a stay.'],
                 ].map(([title, copy]) => (
                   <div key={title} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
                     <h3 className="text-xl font-extrabold text-gray-900">{title}</h3>
                     <p className="mt-3 leading-7 text-gray-600">{copy}</p>
+                    <p className="mt-3 text-sm font-semibold text-orange-600">Coming soon</p>
                   </div>
                 ))}
               </div>

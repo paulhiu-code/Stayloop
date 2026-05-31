@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "start:api": "node server.js",
+    "gen:types": "supabase gen types typescript --local > src/lib/database.types.ts"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.3.0",

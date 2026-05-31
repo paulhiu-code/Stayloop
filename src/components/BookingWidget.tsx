@@ -149,6 +149,11 @@ export default function BookingWidget({
         checkOut,
         numGuests: String(guests),
         totalAmountCents: String(Math.round(quote.total * 100)),
+        baseAmountCents: String(Math.round(quote.subtotal * 100)),
+        cleaningFeeCents: String(Math.round(quote.cleaningFee * 100)),
+        guestServiceFeeCents: String(Math.round(quote.guestServiceFee * 100)),
+        hostServiceFeeCents: String(Math.round(quote.hostServiceFee * 100)),
+        totalNights: String(quote.nights),
       });
 
       if (hostStripeAccountId) {
