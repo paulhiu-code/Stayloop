@@ -1,6 +1,7 @@
 import express from 'express';
 import Stripe from 'stripe';
 import pg from 'pg';
+import { confirmBookingAndSendEmails } from '../server/booking-emails.js';
 
 const { Pool } = pg;
 
@@ -175,6 +176,7 @@ router.post('/api/bookings/create-payment-intent', requireUser, async (req, res,
       totalAmountCents,
       checkIn,
       checkOut,
+      numGuests = 1,
     } = req.body;
 
     if (!propertyId || !hostStripeAccountId || !totalAmountCents || !checkIn || !checkOut) {
@@ -232,7 +234,7 @@ router.post('/api/bookings/create-payment-intent', requireUser, async (req, res,
          payout_status
        )
        VALUES (
-         $1, $2, $3, $2, $3, $4, $5, $4, $5, 1, GREATEST(($5::date - $4::date), 1),
+         $1, $2, $3, $2, $3, $4, $5, $4, $5, $9, GREATEST(($5::date - $4::date), 1),
          $6 / 100.0, 0, 0, $7 / 100.0, $6 / 100.0, ($6 - $7) / 100.0,
          'pending', $8, $8, $6, $7, 'pending'
        )
@@ -246,6 +248,7 @@ router.post('/api/bookings/create-payment-intent', requireUser, async (req, res,
         totalAmountCents,
         platformFeeCents,
         paymentIntent.id,
+        Number(numGuests) || 1,
       ]
     );
 
@@ -254,6 +257,27 @@ router.post('/api/bookings/create-payment-intent', requireUser, async (req, res,
       clientSecret: paymentIntent.client_secret,
       platformFeeCents,
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/api/bookings/:bookingId/confirm-payment', requireUser, async (req, res, next) => {
+  try {
+    const { bookingId } = req.params;
+    const { paymentIntentId } = req.body;
+
+    if (!paymentIntentId || typeof paymentIntentId !== 'string') {
+      return res.status(400).json({ error: 'paymentIntentId is required' });
+    }
+
+    const result = await confirmBookingAndSendEmails(pool, {
+      bookingId,
+      paymentIntentId,
+      userId: req.stayloopUserId,
+    });
+
+    return res.json(result);
   } catch (error) {
     return next(error);
   }
