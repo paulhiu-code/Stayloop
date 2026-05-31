@@ -9,9 +9,10 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 
 
 type CheckoutFormProps = {
   clientSecret: string;
+  bookingId: string;
 };
 
-function CheckoutForm({ clientSecret }: CheckoutFormProps) {
+function CheckoutForm({ clientSecret, bookingId }: CheckoutFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
@@ -38,6 +39,17 @@ function CheckoutForm({ clientSecret }: CheckoutFormProps) {
     if (result.error) {
       setError(result.error.message || 'Payment failed.');
     } else if (result.paymentIntent?.status === 'succeeded') {
+      if (bookingId && import.meta.env.VITE_API_BASE_URL) {
+        try {
+          await apiRequest(`/api/bookings/${bookingId}/confirm-payment`, {
+            method: 'POST',
+            body: { paymentIntentId: result.paymentIntent.id },
+          });
+        } catch (confirmError) {
+          console.error('Booking confirmation failed:', confirmError);
+        }
+      }
+
       setConfirmed(true);
     }
 
@@ -77,6 +89,7 @@ function CheckoutForm({ clientSecret }: CheckoutFormProps) {
 export default function CheckoutPage({ onClose }: { onClose: () => void }) {
   const params = new URLSearchParams(window.location.search);
   const [clientSecret, setClientSecret] = useState('');
+  const [bookingId, setBookingId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [propertyTitle, setPropertyTitle] = useState('');
@@ -122,12 +135,16 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
           numGuests: Number(numGuests || 1),
         };
 
-        const response = await apiRequest<{ clientSecret: string }>('/api/bookings/create-payment-intent', {
-          method: 'POST',
-          body: payload,
-        });
+        const response = await apiRequest<{ clientSecret: string; bookingId: string }>(
+          '/api/bookings/create-payment-intent',
+          {
+            method: 'POST',
+            body: payload,
+          }
+        );
 
         setClientSecret(response.clientSecret);
+        setBookingId(response.bookingId);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to start checkout.');
       } finally {
@@ -178,9 +195,9 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
 
             {error && <div className="rounded-2xl bg-rose-50 p-4 text-rose-700">{error}</div>}
 
-            {clientSecret && (
+            {clientSecret && bookingId && (
               <Elements stripe={stripePromise}>
-                <CheckoutForm clientSecret={clientSecret} />
+                <CheckoutForm clientSecret={clientSecret} bookingId={bookingId} />
               </Elements>
             )}
           </div>

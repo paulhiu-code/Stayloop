@@ -9,7 +9,7 @@ const corsHeaders = {
 const OWNERREZ_API_BASE = 'https://api.ownerrez.com/v2';
 
 interface SyncRequest {
-  action: 'sync_properties' | 'sync_bookings' | 'sync_availability' | 'sync_reviews' | 'sync_all' | 'webhook' | 'test_ownerrez';
+  action: 'sync_properties' | 'sync_bookings' | 'sync_availability' | 'sync_all' | 'webhook' | 'test_ownerrez';
   pmsConnectionId: string;
   propertyId?: string;
   webhookData?: any;
@@ -24,8 +24,6 @@ function syncTypeFromAction(action: string): string {
       return 'booking';
     case 'sync_availability':
       return 'availability';
-    case 'sync_reviews':
-      return 'review';
     case 'sync_all':
       return 'full';
     case 'webhook':
@@ -165,19 +163,6 @@ async function fetchOwnerRezJson(
   return response.json();
 }
 
-function normalizeOwnerRezPaginationPath(nextPageUrl: string): string {
-  if (nextPageUrl.startsWith('http')) {
-    return nextPageUrl
-      .replace(OWNERREZ_API_BASE, '')
-      .replace('https://api.ownerrez.com/v2', '')
-      .replace('https://api.ownerrez.com', '');
-  }
-  if (nextPageUrl.startsWith('/v2/')) {
-    return nextPageUrl.slice(3);
-  }
-  return nextPageUrl;
-}
-
 async function fetchAllOwnerRezItems(
   connection: Record<string, unknown>,
   token: string,
@@ -193,7 +178,7 @@ async function fetchAllOwnerRezItems(
 
     const nextPageUrl = page.next_page_url;
     if (typeof nextPageUrl === 'string' && nextPageUrl.length > 0) {
-      path = normalizeOwnerRezPaginationPath(nextPageUrl);
+      path = nextPageUrl.replace(OWNERREZ_API_BASE, '');
     } else {
       path = null;
     }
@@ -390,7 +375,10 @@ async function fetchBlockedDatesFromV2Bookings(
   const blocked = new Set<string>();
   const today = formatDateOnly(new Date());
   const end = formatDateOnly(addDays(new Date(), PRICING_SYNC_DAYS));
-  const paths = [`/bookings?property_ids=${propertyId}&from=${today}&to=${end}&include_guest=true`];
+  const paths = [
+    `/properties/${propertyId}/bookings?from=${today}&to=${end}`,
+    `/bookings?property_ids=${propertyId}&from=${today}&to=${end}`,
+  ];
 
   for (const path of paths) {
     const bookings = await fetchAllOwnerRezItems(connection, token, path);
@@ -429,62 +417,47 @@ async function fetchBlockedDates(
   return blocked;
 }
 
-async function fetchOwnerRezPropertyDetail(
+async function fetchCleaningFeeFromQuote(
   connection: Record<string, unknown>,
   token: string,
   propertyId: string
-): Promise<Record<string, unknown>> {
-  return fetchOwnerRezJson(connection, token, `/properties/${propertyId}?include_fields=true`);
-}
+): Promise<number> {
+  const arrival = formatDateOnly(addDays(new Date(), 14));
+  const departure = formatDateOnly(addDays(new Date(), 17));
 
-async function tryFetchOwnerRezListing(
-  connection: Record<string, unknown>,
-  token: string,
-  propertyId: string
-): Promise<Record<string, unknown> | null> {
-  try {
-    const response = await ownerRezFetch(
-      connection,
-      token,
-      `/listings/${encodeURIComponent(propertyId)}?includeImages=true&includeDescriptions=true&includeAmenities=true&includeRooms=true`
-    );
-    if (response.status === 402) {
-      console.warn(`OwnerRez listings API unavailable for property ${propertyId} (premium feature disabled)`);
-      return null;
-    }
-    if (!response.ok) {
-      return null;
-    }
-    return (await response.json()) as Record<string, unknown>;
-  } catch (error) {
-    console.warn(`OwnerRez listings fetch failed for property ${propertyId}:`, error);
-    return null;
+  const response = await ownerRezFetch(connection, token, '/quotes', {
+    method: 'POST',
+    body: JSON.stringify({
+      property_id: Number(propertyId),
+      arrival,
+      departure,
+      adults: 2,
+      generate_charges: true,
+      test: true,
+      validate_rules: false,
+    }),
+  });
+
+  if (!response.ok) {
+    return 0;
   }
-}
 
-async function fetchOwnerRezGuestContact(
-  connection: Record<string, unknown>,
-  token: string,
-  guestId: string | number
-): Promise<{ guest_email: string | null; guest_phone: string | null }> {
-  try {
-    const guest = await fetchOwnerRezJson(connection, token, `/guests/${guestId}`);
-    const emails = Array.isArray(guest.email_addresses) ? guest.email_addresses : [];
-    const phones = Array.isArray(guest.phone_numbers) ? guest.phone_numbers : [];
-    const defaultEmail = emails.find((row) => row && typeof row === 'object' && (row as Record<string, unknown>).is_default);
-    const defaultPhone = phones.find((row) => row && typeof row === 'object' && (row as Record<string, unknown>).is_default);
-    const emailRow = (defaultEmail || emails[0]) as Record<string, unknown> | undefined;
-    const phoneRow = (defaultPhone || phones[0]) as Record<string, unknown> | undefined;
+  const quote = (await response.json()) as Record<string, unknown>;
+  const charges = Array.isArray(quote.charges) ? quote.charges : [];
 
-    return {
-      guest_email: typeof emailRow?.address === 'string' ? emailRow.address : null,
-      guest_phone:
-        (typeof phoneRow?.number === 'string' && phoneRow.number) ||
-        (typeof phoneRow?.phone === 'string' ? phoneRow.phone : null),
-    };
-  } catch {
-    return { guest_email: null, guest_phone: null };
+  for (const charge of charges) {
+    if (!charge || typeof charge !== 'object') continue;
+    const row = charge as Record<string, unknown>;
+    const type = String(row.type ?? '').toLowerCase();
+    const description = String(row.description ?? '').toLowerCase();
+    const amount = Number(row.amount ?? 0);
+
+    if (amount > 0 && (type.includes('clean') || description.includes('cleaning'))) {
+      return Number(amount.toFixed(2));
+    }
   }
+
+  return 0;
 }
 
 async function syncOwnerRezPricingAndCalendar(
@@ -507,6 +480,18 @@ async function syncOwnerRezPricingAndCalendar(
   for (const night of pricingNights) {
     processed++;
     try {
+      const { data: existingDay } = await supabase
+        .from('availability_calendar')
+        .select('blocked_by_booking_id')
+        .eq('property_id', stayloopPropertyId)
+        .eq('date', night.date)
+        .maybeSingle();
+
+      if (existingDay?.blocked_by_booking_id) {
+        succeeded++;
+        continue;
+      }
+
       const unavailable = Boolean(night.isStayDisallowed) || blockedDates.has(night.date);
       await supabase.from('availability_calendar').upsert(
         {
@@ -552,8 +537,7 @@ async function syncOwnerRezPricingAndCalendar(
 
   const basePrice = deriveBasePrice(pricingNights);
   const minNights = deriveMinNights(pricingNights);
-  // Pull-only: never POST test quotes to OwnerRez during calendar sync.
-  const cleaningFee = 0;
+  const cleaningFee = await fetchCleaningFeeFromQuote(connection, token, pmsPropertyId).catch(() => 0);
 
   const propertyUpdate: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -592,175 +576,48 @@ async function syncOwnerRezPricingAndCalendar(
   };
 }
 
-function stripHtml(value: string): string {
-  return value
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-function extractOwnerRezListingDescription(listing: Record<string, unknown> | null | undefined): string | null {
-  if (!listing) return null;
-  const descriptions = listing.descriptions;
-  if (!descriptions || typeof descriptions !== 'object' || Array.isArray(descriptions)) {
-    return null;
-  }
-
-  const row = descriptions as Record<string, unknown>;
-  const parts: string[] = [];
-  if (typeof row.headline === 'string' && row.headline.trim()) {
-    parts.push(row.headline.trim());
-  }
-  if (typeof row.short_description === 'string' && row.short_description.trim()) {
-    parts.push(stripHtml(row.short_description.trim()));
-  }
-  if (typeof row.description === 'string' && row.description.trim()) {
-    parts.push(stripHtml(row.description.trim()));
-  }
-
-  return parts.length > 0 ? parts.join('\n\n') : null;
-}
-
-function extractOwnerRezListingImages(listing: Record<string, unknown> | null | undefined): string[] {
-  const images: string[] = [];
-  const sources = [listing?.photos, listing?.images];
-  for (const source of sources) {
-    if (!Array.isArray(source)) continue;
-    for (const image of source) {
-      if (typeof image === 'string' && image.length > 0) {
-        images.push(image);
-        continue;
-      }
-      if (!image || typeof image !== 'object') continue;
-      const row = image as Record<string, unknown>;
-      for (const key of ['large_url', 'original_url', 'url', 'cropped_url', 'thumbnail_url']) {
-        const value = row[key];
-        if (typeof value === 'string' && value.length > 0) {
-          images.push(value);
-          break;
-        }
-      }
-    }
-  }
-  return [...new Set(images)];
-}
-
-function extractOwnerRezListingAmenities(listing: Record<string, unknown> | null | undefined): string[] {
-  const amenities = new Set<string>();
-  const flat = listing?.amenities;
-  if (Array.isArray(flat)) {
-    for (const amenity of flat) {
-      if (typeof amenity === 'string' && amenity.trim()) amenities.add(amenity.trim());
-      else if (amenity && typeof amenity === 'object') {
-        const row = amenity as Record<string, unknown>;
-        const label = row.name ?? row.text ?? row.title;
-        if (typeof label === 'string' && label.trim()) amenities.add(label.trim());
-      }
-    }
-  }
-
-  const callOuts = listing?.amenity_call_outs;
-  if (Array.isArray(callOuts)) {
-    for (const callOut of callOuts) {
-      if (!callOut || typeof callOut !== 'object') continue;
-      const row = callOut as Record<string, unknown>;
-      const label = row.text ?? row.title;
-      if (typeof label === 'string' && label.trim()) amenities.add(label.trim());
-    }
-  }
-
-  const categories = listing?.amenity_categories;
-  if (Array.isArray(categories)) {
-    for (const category of categories) {
-      if (!category || typeof category !== 'object') continue;
-      const rows = (category as Record<string, unknown>).amenities;
-      if (!Array.isArray(rows)) continue;
-      for (const amenity of rows) {
-        if (typeof amenity === 'string' && amenity.trim()) amenities.add(amenity.trim());
-        else if (amenity && typeof amenity === 'object') {
-          const row = amenity as Record<string, unknown>;
-          const label = row.name ?? row.text ?? row.title;
-          if (typeof label === 'string' && label.trim()) amenities.add(label.trim());
-        }
-      }
-    }
-  }
-
-  return [...amenities];
-}
-
-function mapOwnerRezProperty(
-  prop: Record<string, unknown>,
-  connection: Record<string, unknown>,
-  enrichment?: {
-    detail?: Record<string, unknown> | null;
-    listing?: Record<string, unknown> | null;
-  }
-) {
-  const merged = {
-    ...prop,
-    ...(enrichment?.detail || {}),
-  };
-
-  const addr = (merged.address as Record<string, unknown>) || {};
+function mapOwnerRezProperty(prop: Record<string, unknown>, connection: Record<string, unknown>) {
+  const addr = (prop.address as Record<string, unknown>) || {};
   const street1 = typeof addr.street1 === 'string' ? addr.street1 : '';
   const street2 = typeof addr.street2 === 'string' ? addr.street2 : '';
   const addressLine =
     [street1, street2].filter(Boolean).join(', ') ||
     (typeof addr.address === 'string' ? addr.address : 'Address on file');
 
-  const images = extractOwnerRezListingImages(enrichment?.listing ?? null);
-  if (images.length === 0) {
-    for (const key of ['thumbnail_url_large', 'thumbnail_url', 'thumbnail_url_medium']) {
-      const value = merged[key];
-      if (typeof value === 'string' && value.length > 0) {
-        images.push(value);
-      }
+  const images: string[] = [];
+  for (const key of ['thumbnail_url_large', 'thumbnail_url', 'thumbnail_url_medium']) {
+    const value = prop[key];
+    if (typeof value === 'string' && value.length > 0) {
+      images.push(value);
     }
   }
 
-  const amenities = extractOwnerRezListingAmenities(enrichment?.listing ?? null);
-
-  let description =
-    extractOwnerRezListingDescription(enrichment?.listing ?? null) ||
-    (typeof merged.public_url === 'string'
-      ? `Imported from OwnerRez. View listing: ${merged.public_url}`
-      : 'Imported from OwnerRez.');
-
-  const houseRules =
-    typeof enrichment?.listing?.check_in_instructions === 'string' &&
-    enrichment.listing.check_in_instructions.trim()
-      ? stripHtml(enrichment.listing.check_in_instructions.trim())
-      : null;
-
-  let propertyType = typeof merged.property_type === 'string' ? merged.property_type.toLowerCase() : 'house';
+  let propertyType = typeof prop.property_type === 'string' ? prop.property_type.toLowerCase() : 'house';
   const allowedTypes = new Set([
-    'house', 'apartment', 'condo', 'villa', 'cabin', 'cottage', 'townhouse', 'loft', 'other',
-    'entire_home', 'private_room', 'shared_room', 'hotel_room', 'unique_stay', 'studio',
-    'bungalow', 'chalet', 'farm_stay',
+    'house',
+    'apartment',
+    'condo',
+    'villa',
+    'cabin',
+    'cottage',
+    'townhouse',
+    'loft',
+    'other',
   ]);
   if (!allowedTypes.has(propertyType)) {
     propertyType = 'other';
   }
 
-  const listingCancellation =
-    typeof enrichment?.listing?.cancellation_policy === 'string'
-      ? enrichment.listing.cancellation_policy
-      : null;
-
   return {
     host_id: connection.user_id,
     title:
-      (typeof merged.name === 'string' && merged.name) ||
-      (typeof merged.external_name === 'string' && merged.external_name) ||
+      (typeof prop.name === 'string' && prop.name) ||
+      (typeof prop.external_name === 'string' && prop.external_name) ||
       'OwnerRez Property',
-    description,
+    description:
+      typeof prop.public_url === 'string'
+        ? `Imported from OwnerRez. View listing: ${prop.public_url}`
+        : 'Imported from OwnerRez.',
     property_type: propertyType,
     address: addressLine,
     city: (typeof addr.city === 'string' && addr.city) || 'Unknown',
@@ -770,120 +627,21 @@ function mapOwnerRezProperty(
       'N/A',
     country: (typeof addr.country === 'string' && addr.country) || 'US',
     postal_code: typeof addr.postal_code === 'string' ? addr.postal_code : null,
-    latitude: typeof merged.latitude === 'number' ? merged.latitude : null,
-    longitude: typeof merged.longitude === 'number' ? merged.longitude : null,
-    bedrooms: typeof merged.bedrooms === 'number' ? merged.bedrooms : 1,
-    bathrooms: typeof merged.bathrooms === 'number' ? merged.bathrooms : 1,
-    max_guests: typeof merged.max_guests === 'number' ? merged.max_guests : 2,
-    max_adults: typeof merged.max_adults === 'number' ? merged.max_adults : null,
-    max_children: typeof merged.max_children === 'number' ? merged.max_children : null,
-    max_pets: typeof merged.max_pets === 'number' ? merged.max_pets : null,
-    check_in_time: typeof merged.check_in === 'string' ? merged.check_in : null,
-    check_out_time: typeof merged.check_out === 'string' ? merged.check_out : null,
-    currency_code: typeof merged.currency_code === 'string' ? merged.currency_code : 'USD',
-    timezone: typeof merged.time_zone === 'string' ? merged.time_zone : null,
-    cancellation_policy: listingCancellation,
-    house_rules: houseRules,
+    latitude: typeof prop.latitude === 'number' ? prop.latitude : null,
+    longitude: typeof prop.longitude === 'number' ? prop.longitude : null,
+    bedrooms: typeof prop.bedrooms === 'number' ? prop.bedrooms : 1,
+    bathrooms: typeof prop.bathrooms === 'number' ? prop.bathrooms : 1,
+    max_guests: typeof prop.max_guests === 'number' ? prop.max_guests : 2,
     base_price: 0,
     cleaning_fee: 0,
-    amenities,
+    amenities: [],
     images,
-    is_active: merged.active !== false,
-    external_pms_property_id: String(merged.id),
-    external_pms_provider: 'ownerrez',
-    synced_at: new Date().toISOString(),
+    is_active: prop.active !== false,
     pms_integration: {
       provider: 'ownerrez',
-      property_id: String(merged.id),
+      property_id: String(prop.id),
       last_synced: new Date().toISOString(),
     },
-  };
-}
-
-function mapOwnerRezBookingStatus(booking: Record<string, unknown>): string {
-  const status = String(booking.status ?? '').toLowerCase();
-  if (status === 'canceled' || status === 'cancelled') return 'cancelled';
-  if (status === 'confirmed' || status === 'active') return 'confirmed';
-  return 'pending';
-}
-
-function extractOwnerRezGuestInfo(booking: Record<string, unknown>) {
-  const guest = booking.guest as Record<string, unknown> | undefined;
-  if (!guest) {
-    return { guest_name: null, guest_email: null, guest_phone: null };
-  }
-
-  const firstName = typeof guest.first_name === 'string' ? guest.first_name : '';
-  const lastName = typeof guest.last_name === 'string' ? guest.last_name : '';
-  const fullName =
-    [firstName, lastName].filter(Boolean).join(' ') ||
-    (typeof guest.name === 'string' ? guest.name : null);
-
-  return {
-    guest_name: fullName,
-    guest_email: typeof guest.email === 'string' ? guest.email : null,
-    guest_phone:
-      (typeof guest.phone === 'string' && guest.phone) ||
-      (typeof guest.phone_number === 'string' ? guest.phone_number : null),
-  };
-}
-
-function ownerRezBookingQuerySuffix(): string {
-  return 'include_guest=true&include_charges=true&include_cancellation_policy=true';
-}
-
-function buildOwnerRezBookingsPath(propertyId?: string): string {
-  const suffix = ownerRezBookingQuerySuffix();
-  if (propertyId) {
-    return `/bookings?property_ids=${encodeURIComponent(propertyId)}&${suffix}`;
-  }
-
-  const since = new Date();
-  since.setFullYear(since.getFullYear() - 2);
-  return `/bookings?since_utc=${encodeURIComponent(since.toISOString())}&${suffix}`;
-}
-
-function calculateOwnerRezBookingNights(booking: Record<string, unknown>): number {
-  if (typeof booking.nights === 'number' && booking.nights > 0) {
-    return booking.nights;
-  }
-
-  const arrival = booking.arrival ?? booking.check_in;
-  const departure = booking.departure ?? booking.check_out;
-  if (arrival == null || departure == null) {
-    return 1;
-  }
-
-  const start = new Date(`${normalizeDateOnly(arrival)}T12:00:00`);
-  const end = new Date(`${normalizeDateOnly(departure)}T12:00:00`);
-  const nights = Math.round((end.getTime() - start.getTime()) / 86400000);
-  return nights > 0 ? nights : 1;
-}
-
-function calculateOwnerRezBookingAmounts(booking: Record<string, unknown>) {
-  const total = Number(booking.total_amount ?? booking.total ?? 0);
-  const charges = Array.isArray(booking.charges) ? booking.charges : [];
-  let cleaningFee = 0;
-
-  for (const charge of charges) {
-    if (!charge || typeof charge !== 'object') continue;
-    const row = charge as Record<string, unknown>;
-    const type = String(row.type ?? '').toLowerCase();
-    const description = String(row.description ?? '').toLowerCase();
-    const amount = Number(row.amount ?? 0);
-    if (amount > 0 && (type.includes('clean') || description.includes('cleaning'))) {
-      cleaningFee += amount;
-    }
-  }
-
-  const guestServiceFee = Number((total * 0.05).toFixed(2));
-  const hostServiceFee = Number((total * 0.1).toFixed(2));
-
-  return {
-    total,
-    cleaningFee: Number(cleaningFee.toFixed(2)),
-    guestServiceFee,
-    hostServiceFee,
   };
 }
 
@@ -996,9 +754,6 @@ Deno.serve(async (req: Request) => {
       case 'sync_availability':
         result = await syncAvailability(supabase, resolvedConnection, ownerRezToken, propertyId);
         break;
-      case 'sync_reviews':
-        result = await syncReviews(supabase, resolvedConnection, ownerRezToken, propertyId);
-        break;
       case 'sync_all':
         result = await syncAllFromOwnerRez(supabase, resolvedConnection, ownerRezToken);
         break;
@@ -1090,11 +845,7 @@ async function syncProperties(supabase: any, connection: any, token: string) {
         .eq('pms_property_id', pmsPropertyId)
         .maybeSingle();
 
-      const [detail, listing] = await Promise.all([
-        fetchOwnerRezPropertyDetail(connection, token, pmsPropertyId).catch(() => null),
-        tryFetchOwnerRezListing(connection, token, pmsPropertyId),
-      ]);
-      const propertyData = mapOwnerRezProperty(prop, connection, { detail, listing });
+      const propertyData = mapOwnerRezProperty(prop, connection);
       let stayloopPropertyId: string | null = mapping?.stayloop_property_id ?? null;
 
       if (mapping) {
@@ -1138,23 +889,17 @@ async function syncProperties(supabase: any, connection: any, token: string) {
 
       if (stayloopPropertyId) {
         try {
-          const cancellationPolicy = await fetchPropertyCancellationPolicy(
+          await syncOwnerRezPricingAndCalendar(
+            supabase,
             connection,
             token,
-            pmsPropertyId
+            pmsPropertyId,
+            stayloopPropertyId
           );
-          if (cancellationPolicy) {
-            await supabase
-              .from('properties')
-              .update({ cancellation_policy: cancellationPolicy })
-              .eq('id', stayloopPropertyId);
-          }
-        } catch (policyError) {
-          console.warn(`Cancellation policy sync failed for ${pmsPropertyId}:`, policyError);
+        } catch (pricingError) {
+          console.error(`Pricing sync failed for property ${pmsPropertyId}:`, pricingError);
         }
       }
-
-      // Calendar/pricing runs via sync_all or sync_availability to avoid worker timeouts.
 
       succeeded++;
     } catch (error) {
@@ -1166,192 +911,17 @@ async function syncProperties(supabase: any, connection: any, token: string) {
   return { processed, succeeded, failed };
 }
 
-
-function pickBestCancellationPolicy(current: string | null, candidate: unknown): string | null {
-  const next = typeof candidate === 'string' ? candidate.trim() : '';
-  if (!next) return current;
-  if (!current || next.length > current.length) return next;
-  return current;
-}
-
-async function fetchPropertyCancellationPolicy(
-  connection: Record<string, unknown>,
-  token: string,
-  propertyId: string
-): Promise<string | null> {
-  try {
-    const bookings = await fetchAllOwnerRezItems(
-      connection,
-      token,
-      `/bookings?property_ids=${encodeURIComponent(propertyId)}&include_cancellation_policy=true&limit=10`
-    );
-    let best: string | null = null;
-    for (const booking of bookings) {
-      best = pickBestCancellationPolicy(best, booking.cancellation_policy_description);
-    }
-    return best;
-  } catch (error) {
-    console.warn(`Cancellation policy fetch failed for property ${propertyId}:`, error);
-    return null;
-  }
-}
-
-async function applyPropertyCancellationPolicies(
-  supabase: ReturnType<typeof createClient>,
-  policies: Map<string, string>
-) {
-  for (const [propertyId, policy] of policies.entries()) {
-    if (!policy) continue;
-    await supabase.from('properties').update({ cancellation_policy: policy }).eq('id', propertyId);
-  }
-}
-
-function buildOwnerRezReviewsPath(propertyId?: string): string {
-  if (propertyId) {
-    return `/reviews?property_id=${encodeURIComponent(propertyId)}&active=true`;
-  }
-  return '/reviews?active=true&since_utc=2020-01-01T00:00:00Z';
-}
-
-async function syncReviews(
-  supabase: ReturnType<typeof createClient>,
-  connection: Record<string, unknown>,
-  token: string,
-  propertyId?: string
-) {
-  const { data: mappings, error: mappingError } = await supabase
-    .from('pms_property_mappings')
-    .select('pms_property_id, stayloop_property_id')
-    .eq('pms_connection_id', connection.id);
-
-  if (mappingError) throw mappingError;
-
-  const mappingByPmsId = new Map<string, { stayloopPropertyId: string; hostId: string | null }>();
-  for (const mapping of mappings || []) {
-    const { data: property } = await supabase
-      .from('properties')
-      .select('host_id')
-      .eq('id', mapping.stayloop_property_id)
-      .maybeSingle();
-    mappingByPmsId.set(String(mapping.pms_property_id), {
-      stayloopPropertyId: mapping.stayloop_property_id,
-      hostId: property?.host_id ?? null,
-    });
-  }
-
-  if (propertyId && !mappingByPmsId.has(String(propertyId))) {
-    throw new Error('Property mapping not found for review sync');
-  }
-
-  const reviews = await fetchAllOwnerRezItems(connection, token, buildOwnerRezReviewsPath(propertyId));
-  const bookingLookup = new Map<string, string>();
-  const stayloopPropertyIds = [...new Set((mappings || []).map((m) => m.stayloop_property_id))];
-  if (stayloopPropertyIds.length > 0) {
-    const { data: importedBookings } = await supabase
-      .from('bookings')
-      .select('id, property_id, external_pms_booking_id')
-      .in('property_id', stayloopPropertyIds)
-      .eq('external_pms_provider', 'ownerrez')
-      .not('external_pms_booking_id', 'is', null);
-    for (const booking of importedBookings || []) {
-      bookingLookup.set(`${booking.property_id}:${booking.external_pms_booking_id}`, booking.id);
-    }
-  }
-
-  let processed = 0;
-  let succeeded = 0;
-  let failed = 0;
-  const syncedAt = new Date().toISOString();
-
-  for (const review of reviews) {
-    processed++;
-    try {
-      if (review.visible === false) {
-        continue;
-      }
-
-      const reviewPropertyId = String(review.property_id ?? review.property?.id ?? '');
-      const mapped = mappingByPmsId.get(reviewPropertyId);
-      if (!mapped?.hostId) {
-        failed++;
-        continue;
-      }
-
-      const externalReviewId = String(review.id);
-      const stars = Number(review.stars ?? 0);
-      if (!Number.isFinite(stars) || stars < 1 || stars > 5) {
-        failed++;
-        continue;
-      }
-
-      const externalBookingId =
-        review.booking_id != null ? String(review.booking_id) : null;
-      const linkedBookingId = externalBookingId
-        ? bookingLookup.get(`${mapped.stayloopPropertyId}:${externalBookingId}`) ?? null
-        : null;
-
-      const reviewRow = {
-        property_id: mapped.stayloopPropertyId,
-        booking_id: linkedBookingId,
-        reviewer_id: null,
-        reviewee_id: mapped.hostId,
-        rating: Math.round(stars),
-        comment: typeof review.body === 'string' ? review.body.trim() : null,
-        external_pms_review_id: externalReviewId,
-        external_pms_provider: 'ownerrez',
-        guest_reviewer_name:
-          typeof review.reviewer === 'string' && review.reviewer.trim()
-            ? review.reviewer.trim()
-            : 'Guest',
-        review_source:
-          typeof review.listing_site === 'string'
-            ? review.listing_site.toLowerCase()
-            : 'ownerrez',
-        synced_at: syncedAt,
-      };
-
-      const { data: existingReview } = await supabase
-        .from('reviews')
-        .select('id')
-        .eq('property_id', mapped.stayloopPropertyId)
-        .eq('external_pms_review_id', externalReviewId)
-        .maybeSingle();
-
-      if (existingReview) {
-        const { error: updateError } = await supabase
-          .from('reviews')
-          .update(reviewRow)
-          .eq('id', existingReview.id);
-        if (updateError) throw updateError;
-      } else {
-        const { error: insertError } = await supabase.from('reviews').insert(reviewRow);
-        if (insertError) throw insertError;
-      }
-
-      succeeded++;
-    } catch (error) {
-      console.error(`Failed to sync review ${String(review.id)}:`, error);
-      failed++;
-    }
-  }
-
-  return { processed, succeeded, failed };
-}
-
 async function syncBookings(supabase: any, connection: any, token: string, propertyId?: string) {
-  const bookings = await fetchAllOwnerRezItems(connection, token, buildOwnerRezBookingsPath(propertyId));
+  const path = propertyId ? `/properties/${propertyId}/bookings` : '/bookings';
+  const bookings = await fetchAllOwnerRezItems(connection, token, path);
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
-  const guestContactCache = new Map<string, { guest_email: string | null; guest_phone: string | null }>();
-  const propertyCancellationPolicies = new Map<string, string>();
 
   for (const booking of bookings) {
     processed++;
     try {
-      const bookingPropertyId = String(
-        booking.property_id ?? booking.propertyId ?? booking.property?.id ?? ''
-      );
+      const bookingPropertyId = String(booking.property_id ?? booking.propertyId ?? '');
       const { data: mapping } = await supabase
         .from('pms_property_mappings')
         .select('id, stayloop_property_id')
@@ -1364,111 +934,42 @@ async function syncBookings(supabase: any, connection: any, token: string, prope
         continue;
       }
 
-      const { data: property, error: propertyError } = await supabase
+      const { data: property } = await supabase
         .from('properties')
         .select('host_id')
         .eq('id', mapping.stayloop_property_id)
         .single();
 
-      if (propertyError || !property) {
-        throw propertyError || new Error('Property not found for booking mapping');
-      }
-
-      const externalBookingId = String(booking.id);
-      const guestInfo = extractOwnerRezGuestInfo(booking);
-      const guestId = booking.guest_id ?? booking.guest?.id;
-
-      if ((!guestInfo.guest_email || !guestInfo.guest_phone) && guestId != null) {
-        const cacheKey = String(guestId);
-        if (!guestContactCache.has(cacheKey)) {
-          guestContactCache.set(cacheKey, await fetchOwnerRezGuestContact(connection, token, cacheKey));
-        }
-        const contact = guestContactCache.get(cacheKey)!;
-        if (!guestInfo.guest_email) guestInfo.guest_email = contact.guest_email;
-        if (!guestInfo.guest_phone) guestInfo.guest_phone = contact.guest_phone;
-      }
-
-      const { total, cleaningFee, guestServiceFee, hostServiceFee } = calculateOwnerRezBookingAmounts(booking);
-      const syncedAt = new Date().toISOString();
-      const bookingRow = {
-        property_id: mapping.stayloop_property_id,
-        guest_id: null,
-        host_id: property.host_id,
-        check_in: normalizeDateOnly(booking.arrival ?? booking.check_in),
-        check_out: normalizeDateOnly(booking.departure ?? booking.check_out),
-        num_guests:
-          Number(booking.adults ?? booking.guests ?? 1) +
-          Number(booking.children ?? 0) +
-          Number(booking.infants ?? 0),
-        total_nights: calculateOwnerRezBookingNights(booking),
-        base_amount: total,
-        cleaning_fee: cleaningFee,
-        guest_service_fee: guestServiceFee,
-        host_service_fee: hostServiceFee,
-        total_amount: total + guestServiceFee,
-        host_payout: total - hostServiceFee,
-        status: mapOwnerRezBookingStatus(booking),
-        external_pms_booking_id: externalBookingId,
-        external_pms_provider: 'ownerrez',
-        booking_source:
-          typeof booking.listing_site === 'string'
-            ? booking.listing_site.toLowerCase()
-            : 'ownerrez',
-        is_block: booking.is_block === true || booking.type === 'block',
-        guest_name: guestInfo.guest_name,
-        guest_email: guestInfo.guest_email,
-        guest_phone: guestInfo.guest_phone,
-        synced_at: syncedAt,
-        sync_direction: 'from_pms',
-      };
-
       const { data: existingBooking } = await supabase
         .from('bookings')
         .select('id')
         .eq('property_id', mapping.stayloop_property_id)
-        .eq('external_pms_booking_id', externalBookingId)
+        .eq('payment_intent_id', String(booking.id))
         .maybeSingle();
 
-      let stayloopBookingId: string;
-      if (existingBooking) {
-        const { error: updateError } = await supabase
-          .from('bookings')
-          .update(bookingRow)
-          .eq('id', existingBooking.id);
-        if (updateError) throw updateError;
-        stayloopBookingId = existingBooking.id;
-      } else {
-        const { data: insertedBooking, error: insertError } = await supabase
-          .from('bookings')
-          .insert(bookingRow)
-          .select('id')
-          .single();
-        if (insertError || !insertedBooking) {
-          throw insertError || new Error('Failed to insert imported booking');
-        }
-        stayloopBookingId = insertedBooking.id;
-      }
+      if (!existingBooking) {
+        const total = Number(booking.total || 0);
+        const cleaningFee = Number(booking.cleaning_fee ?? booking.cleaningFee ?? 0);
+        const guestServiceFee = Number((total * 0.05).toFixed(2));
+        const hostServiceFee = Number((total * 0.1).toFixed(2));
 
-      await supabase.from('pms_booking_mappings').upsert(
-        {
-          pms_connection_id: connection.id,
-          stayloop_booking_id: stayloopBookingId,
-          pms_booking_id: externalBookingId,
-          pms_quote_id: booking.quote_id != null ? String(booking.quote_id) : null,
-          last_synced_at: syncedAt,
-          sync_status: 'synced',
-          updated_at: syncedAt,
-        },
-        { onConflict: 'pms_connection_id,pms_booking_id' }
-      );
-
-      const currentPolicy = propertyCancellationPolicies.get(mapping.stayloop_property_id) ?? null;
-      const nextPolicy = pickBestCancellationPolicy(
-        currentPolicy,
-        booking.cancellation_policy_description
-      );
-      if (nextPolicy) {
-        propertyCancellationPolicies.set(mapping.stayloop_property_id, nextPolicy);
+        await supabase.from('bookings').insert({
+          property_id: mapping.stayloop_property_id,
+          guest_id: connection.user_id,
+          host_id: property.host_id,
+          check_in: booking.arrival,
+          check_out: booking.departure,
+          num_guests: booking.guests || 1,
+          total_nights: booking.nights || 1,
+          base_amount: total,
+          cleaning_fee: cleaningFee,
+          guest_service_fee: guestServiceFee,
+          host_service_fee: hostServiceFee,
+          total_amount: total + guestServiceFee,
+          host_payout: total - hostServiceFee,
+          status: booking.status === 'confirmed' ? 'confirmed' : 'pending',
+          payment_intent_id: String(booking.id),
+        });
       }
 
       succeeded++;
@@ -1478,14 +979,7 @@ async function syncBookings(supabase: any, connection: any, token: string, prope
     }
   }
 
-  await applyPropertyCancellationPolicies(supabase, propertyCancellationPolicies);
-
-  return {
-    processed,
-    succeeded,
-    failed,
-    cancellationPoliciesUpdated: propertyCancellationPolicies.size,
-  };
+  return { processed, succeeded, failed };
 }
 
 async function syncAvailability(supabase: any, connection: any, token: string, propertyId?: string) {
@@ -1564,13 +1058,6 @@ async function syncAllFromOwnerRez(supabase: any, connection: any, token: string
     bookingResult = await syncBookings(supabase, connection, token);
   }
 
-  let reviewResult = { processed: 0, succeeded: 0, failed: 0 };
-  try {
-    reviewResult = await syncReviews(supabase, connection, token);
-  } catch (error) {
-    console.error('Review sync failed during sync_all:', error);
-  }
-
   await supabase
     .from('pms_connections')
     .update({
@@ -1586,7 +1073,6 @@ async function syncAllFromOwnerRez(supabase: any, connection: any, token: string
     failed,
     calendars: calendarResults,
     bookings: bookingResult,
-    reviews: reviewResult,
   };
 }
 

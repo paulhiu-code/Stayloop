@@ -158,6 +158,17 @@ async function syncOwnerRezConnectionInChunks(
     })
     .eq('id', connection.id);
 
+  let outbound: Record<string, unknown> | null = null;
+  try {
+    outbound = await invokeOutboundProcessor(supabaseUrl, serviceRoleKey, cronSecret, connection.id);
+  } catch (outboundError) {
+    console.error(`Outbound processor failed for ${connection.id}:`, outboundError);
+    outbound = {
+      success: false,
+      error: outboundError instanceof Error ? outboundError.message : 'Outbound processor failed',
+    };
+  }
+
   return {
     calendars: {
       processed: calendarsProcessed,
@@ -167,6 +178,7 @@ async function syncOwnerRezConnectionInChunks(
     },
     bookings,
     bookingsError,
+    outbound,
     success: overallSuccess,
   };
 }
