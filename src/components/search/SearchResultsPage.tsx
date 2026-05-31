@@ -1,8 +1,9 @@
 import { Loader2, MapPin, SearchX, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { stayCategories } from '../../data/showcase';
 import {
   applyCategoryToFilters,
+  clearCategoryIfManualEdit,
+  searchHeading,
   searchProperties,
   type SearchFilters,
   type SearchResultProperty,
@@ -11,6 +12,7 @@ import { buildSearchPath, parseSearchParams } from '../../lib/searchUrl';
 import Header from '../Header';
 import PropertyCard from '../PropertyCard';
 import SearchBar from './SearchBar';
+import CategoryPills from './CategoryPills';
 import SearchFiltersBar from './SearchFiltersBar';
 
 type SearchResultsPageProps = {
@@ -81,9 +83,14 @@ export default function SearchResultsPage({
     setActiveFilters(nextFilters);
   }
 
+  function updateDraftFilters(next: SearchFilters) {
+    setDraftFilters(clearCategoryIfManualEdit(draftFilters, next));
+  }
+
   function updateFilters(next: SearchFilters) {
-    setDraftFilters(next);
-    setActiveFilters(next);
+    const cleared = clearCategoryIfManualEdit(draftFilters, next);
+    setDraftFilters(cleared);
+    setActiveFilters(cleared);
   }
 
   function loadMore() {
@@ -100,7 +107,7 @@ export default function SearchResultsPage({
     setActiveFilters(nextFilters);
   }
 
-  const heading = activeFilters.where?.trim() || 'All destinations';
+  const heading = searchHeading(activeFilters);
   const subtitleParts = [
     activeFilters.checkIn && activeFilters.checkOut ? `${activeFilters.checkIn} to ${activeFilters.checkOut}` : null,
     activeFilters.guests ? `${activeFilters.guests} guest${activeFilters.guests === 1 ? '' : 's'}` : null,
@@ -127,20 +134,13 @@ export default function SearchResultsPage({
             )}
           </div>
 
-          <SearchBar filters={draftFilters} onChange={setDraftFilters} onSearch={() => runSearch()} />
+          <SearchBar filters={draftFilters} onChange={updateDraftFilters} onSearch={() => runSearch()} />
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            {stayCategories.map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => applyCategory(category)}
-                className="rounded-full border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-orange-400 hover:bg-orange-50"
-              >
-                {category}
-              </button>
-            ))}
-          </div>
+          <CategoryPills
+            className="mt-4"
+            activeCategory={activeFilters.category}
+            onSelect={applyCategory}
+          />
         </div>
       </section>
 

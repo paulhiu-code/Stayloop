@@ -111,6 +111,7 @@ function AppContent() {
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [showDashboard, setShowDashboard] = useState(false);
   const [page, setPage] = useState<SitePage | 'reset-password' | 'admin'>(() => pageFromPath(window.location.pathname));
+  const [searchQuery, setSearchQuery] = useState(() => window.location.search);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [propertyId, setPropertyId] = useState<string | null>(() => propertyIdFromPath(window.location.pathname));
@@ -121,6 +122,7 @@ function AppContent() {
     const handlePopState = () => {
       setPage(pageFromPath(window.location.pathname));
       setPropertyId(propertyIdFromPath(window.location.pathname));
+      setSearchQuery(window.location.search);
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -136,6 +138,7 @@ function AppContent() {
   function goToSearch(filters: SearchFilters) {
     const path = buildSearchPath({ ...filters, page: 1 });
     window.history.pushState({}, '', path);
+    setSearchQuery(window.location.search);
     setPage('search');
     setPropertyId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -285,10 +288,11 @@ function AppContent() {
     return (
       <>
         <SearchResultsPage
+          key={searchQuery}
           onViewStay={viewProperty}
           onNavigateHome={() => navigate('home')}
           onShowAuth={() => openAuth('signin')}
-          initialFilters={parseSearchParams(window.location.search)}
+          initialFilters={parseSearchParams(searchQuery.startsWith('?') ? searchQuery.slice(1) : searchQuery)}
         />
         {showAuth && <AuthModal onClose={() => setShowAuth(false)} initialMode={authMode} />}
       </>
