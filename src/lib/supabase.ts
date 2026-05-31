@@ -61,8 +61,10 @@ export type Property = {
 export type Booking = {
   id: string;
   property_id: string;
-  guest_id: string;
-  host_id: string;
+  guest_id: string | null;
+  host_id: string | null;
+  guest_user_id?: string | null;
+  host_user_id?: string | null;
   check_in: string;
   check_out: string;
   num_guests: number;
@@ -76,6 +78,12 @@ export type Booking = {
   status: 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled';
   payment_intent_id: string | null;
   payout_date: string | null;
+  payout_status?: 'pending' | 'released' | 'failed' | null;
+  booking_source?: string | null;
+  origin_platform?: string | null;
+  guest_name?: string | null;
+  guest_email?: string | null;
+  external_pms_booking_id?: string | null;
   created_at: string;
   updated_at: string;
 };

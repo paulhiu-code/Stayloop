@@ -47,10 +47,16 @@ The PMS screen is present in the app, but the OwnerRez self-serve OAuth flow sti
 
 ## Stripe production note
 
-Stripe Connect needs a Node/Express API host in addition to the Vercel frontend. Mount `routes/stripe.js` in your Express app, then set these server-side environment variables:
+Stripe Connect needs a Node/Express API host in addition to the Vercel frontend. The runnable server lives at `server/index.js` (it mounts `routes/stripe.js`, verifies Supabase sessions, and handles the Stripe webhook). Start it with `npm run server`, point the frontend's `VITE_API_BASE_URL` at it, then set these server-side environment variables:
 
 - `DATABASE_URL`
 - `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `SUPABASE_URL` and `SUPABASE_ANON_KEY` (used to verify guest/host sessions)
 - `PLATFORM_FEE_PERCENT` (optional; defaults to `10`)
+- `PORT` (optional; defaults to `4000`)
+- `CORS_ORIGIN` (optional; defaults to `*` — set to your Vercel domain in production)
+
+Configure a Stripe webhook endpoint pointing at `https://your-api-domain.com/api/stripe/webhook` and subscribe to `payment_intent.succeeded`, `payment_intent.payment_failed`, and `account.updated`. The signing secret Stripe generates is your `STRIPE_WEBHOOK_SECRET`. Without this webhook, bookings stay `pending` even after a successful payment.
 
 Never expose `STRIPE_SECRET_KEY` in Vercel frontend environment variables.

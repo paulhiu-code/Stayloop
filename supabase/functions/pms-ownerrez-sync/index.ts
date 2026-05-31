@@ -480,6 +480,18 @@ async function syncOwnerRezPricingAndCalendar(
   for (const night of pricingNights) {
     processed++;
     try {
+      const { data: existingDay } = await supabase
+        .from('availability_calendar')
+        .select('blocked_by_booking_id')
+        .eq('property_id', stayloopPropertyId)
+        .eq('date', night.date)
+        .maybeSingle();
+
+      if (existingDay?.blocked_by_booking_id) {
+        succeeded++;
+        continue;
+      }
+
       const unavailable = Boolean(night.isStayDisallowed) || blockedDates.has(night.date);
       await supabase.from('availability_calendar').upsert(
         {

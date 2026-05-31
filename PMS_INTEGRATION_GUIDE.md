@@ -186,7 +186,14 @@ Receives webhooks from PMS providers:
 Runs scheduled OwnerRez sync for connections with auto-sync enabled:
 - Endpoint: `/functions/v1/pms-scheduled-sync`
 - Auth: header `x-stayloop-cron-secret` must match `PMS_CRON_SECRET`
-- Calls `pms-ownerrez-sync` with `sync_all` (calendars, pricing, bookings)
+- Pulls calendars and bookings per property, then invokes `pms-outbound-processor` (dry-run)
+
+### 5. `pms-outbound-processor`
+Processes `pms_sync_queue` jobs for StayLoop → OwnerRez propagation:
+- Endpoint: `/functions/v1/pms-outbound-processor`
+- Auth: service role bearer token or `x-stayloop-cron-secret`
+- **Dry-run by default** — logs intended OwnerRez API calls without executing them
+- Controlled by env `OWNERREZ_OUTBOUND_ENABLED` (default: disabled)
 
 ### Edge Function secrets
 

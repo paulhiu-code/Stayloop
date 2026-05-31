@@ -165,6 +165,77 @@ router.get('/api/stripe/connect/account-status', requireUser, async (req, res, n
   }
 });
 
+router.post('/api/bookings/:bookingId/confirm-payment', requireUser, async (req, res, next) => {
+  try {
+    const { bookingId } = req.params;
+    const { paymentIntentId } = req.body;
+
+    if (!paymentIntentId || typeof paymentIntentId !== 'string') {
+      return res.status(400).json({ error: 'paymentIntentId is required' });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({ error: 'Payment has not succeeded yet' });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE bookings
+       SET status = 'confirmed',
+           updated_at = now()
+       WHERE id = $1
+         AND guest_user_id = $2
+         AND stripe_payment_intent_id = $3
+         AND status = 'pending'
+       RETURNING id, property_id, check_in, check_out, status`,
+      [bookingId, req.stayloopUserId, paymentIntentId]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: 'Pending booking not found for this payment' });
+    }
+
+    return res.json({ booking: rows[0] });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res, next) => {
+  try {
+    assertStripeConfigured();
+
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      return res.status(503).json({ error: 'STRIPE_WEBHOOK_SECRET is not configured' });
+    }
+
+    const signature = req.headers['stripe-signature'];
+    if (!signature || typeof signature !== 'string') {
+      return res.status(400).json({ error: 'Missing Stripe signature' });
+    }
+
+    const event = stripe.webhooks.constructEvent(req.body, signature, webhookSecret);
+
+    if (event.type === 'payment_intent.succeeded') {
+      const paymentIntent = event.data.object;
+      await pool.query(
+        `UPDATE bookings
+         SET status = 'confirmed',
+             updated_at = now()
+         WHERE stripe_payment_intent_id = $1
+           AND status = 'pending'`,
+        [paymentIntent.id]
+      );
+    }
+
+    return res.json({ received: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.post('/api/bookings/create-payment-intent', requireUser, async (req, res, next) => {
   try {
     assertStripeConfigured();
