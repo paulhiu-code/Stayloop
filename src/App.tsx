@@ -12,6 +12,7 @@ import HostDashboard from './components/HostDashboard';
 import CheckoutPage from './components/CheckoutPage';
 import PropertyDetailPage from './components/PropertyDetailPage';
 import { supabase, Property } from './lib/supabase';
+import { buildDashboardPath, parseDashboardSearch } from './lib/dashboardRoute';
 import { showcaseProperties } from './data/showcase';
 
 const featuredMarkets = [
@@ -73,6 +74,7 @@ function pageFromPath(path: string): SitePage {
   if (path === '/host-onboarding') return 'host-onboarding';
   if (path === '/host-dashboard') return 'host-dashboard';
   if (path === '/checkout') return 'checkout';
+  if (path === '/dashboard') return 'dashboard';
   if (propertyIdFromPath(path)) return 'property';
   return 'home';
 }
@@ -82,6 +84,11 @@ function pathFromPage(page: SitePage, propertyId?: string) {
   if (page === 'partners') return '/partners';
   if (page === 'host-onboarding') return '/host-onboarding';
   if (page === 'host-dashboard') return '/host-dashboard';
+  if (page === 'dashboard') {
+    return window.location.pathname === '/dashboard' && window.location.search
+      ? `/dashboard${window.location.search}`
+      : '/dashboard';
+  }
   if (page === 'checkout') {
     return window.location.search ? `/checkout${window.location.search}` : '/checkout';
   }
@@ -92,7 +99,6 @@ function pathFromPage(page: SitePage, propertyId?: string) {
 function AppContent() {
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
-  const [showDashboard, setShowDashboard] = useState(false);
   const [page, setPage] = useState<SitePage>(() => pageFromPath(window.location.pathname));
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -210,7 +216,48 @@ function AppContent() {
   }
 
   if (page === 'checkout') {
-    return <CheckoutPage onClose={() => navigate('home')} />;
+    return (
+      <CheckoutPage
+        onClose={() => navigate('home')}
+        onTripDetails={() =>
+          navigate('dashboard', { path: buildDashboardPath('guest', 'bookings') })
+        }
+      />
+    );
+  }
+
+  if (page === 'dashboard') {
+    if (!user) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+          <div className="max-w-md rounded-3xl bg-white p-8 text-center shadow-xl">
+            <h1 className="text-2xl font-extrabold text-gray-900">Sign in to view your dashboard</h1>
+            <p className="mt-3 text-gray-600">Trips, messages, and host tools are available after you sign in.</p>
+            <button
+              onClick={() => openAuth('signin')}
+              className="mt-6 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-6 py-3 font-bold text-white"
+            >
+              Sign in
+            </button>
+          </div>
+          {showAuth && <AuthModal onClose={() => setShowAuth(false)} initialMode={authMode} />}
+        </div>
+      );
+    }
+
+    const { mode, tab } = parseDashboardSearch(window.location.search);
+
+    return (
+      <Dashboard
+        initialMode={mode}
+        initialTab={tab}
+        onClose={() => navigate('home')}
+        onNavigate={navigate}
+        onRouteChange={(nextMode, nextTab) => {
+          window.history.replaceState({}, '', buildDashboardPath(nextMode, nextTab));
+        }}
+      />
+    );
   }
 
   if (page === 'property' && propertyId) {
@@ -225,15 +272,11 @@ function AppContent() {
     );
   }
 
-  if (showDashboard) {
-    return <Dashboard onClose={() => setShowDashboard(false)} onNavigate={navigate} />;
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
         onShowAuth={openAuth}
-        onShowDashboard={() => setShowDashboard(true)}
+        onShowDashboard={() => navigate('dashboard')}
         onNavigate={navigate}
       />
 

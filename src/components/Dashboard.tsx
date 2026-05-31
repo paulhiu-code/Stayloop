@@ -13,6 +13,8 @@ import {
   CreditCard,
   Loader2,
   MapPin,
+  MessageSquare,
+  Plus,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { Property, ReferralEarning } from '../lib/supabase';
@@ -33,20 +35,32 @@ import {
 } from '../lib/dashboard';
 import type { SitePage } from './Header';
 import PMSSettings from './PMSSettings';
-
-type DashboardTab = 'overview' | 'properties' | 'bookings' | 'referrals' | 'pms';
-type DashboardMode = 'guest' | 'host';
+import MessagesPanel from './MessagesPanel';
+import AddPropertyModal from './AddPropertyModal';
+import { ensureBookingConversations } from '../lib/messaging';
+import {
+  buildDashboardPath,
+  type DashboardMode,
+  type DashboardTab,
+} from '../lib/dashboardRoute';
 
 export default function Dashboard({
   onClose,
   onNavigate,
+  initialMode,
+  initialTab,
+  onRouteChange,
 }: {
   onClose: () => void;
   onNavigate?: (page: SitePage) => void;
+  initialMode?: DashboardMode;
+  initialTab?: DashboardTab;
+  onRouteChange?: (mode: DashboardMode, tab: DashboardTab) => void;
 }) {
   const { profile, updateUserType } = useAuth();
-  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
-  const [dashboardMode, setDashboardMode] = useState<DashboardMode>('guest');
+  const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab ?? 'bookings');
+  const [dashboardMode, setDashboardMode] = useState<DashboardMode>(initialMode ?? 'guest');
+  const [showAddProperty, setShowAddProperty] = useState(false);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -73,8 +87,34 @@ export default function Dashboard({
 
   useEffect(() => {
     if (!profile) return;
-    setDashboardMode(profile.user_type === 'guest' ? 'guest' : 'host');
-  }, [profile?.id, profile?.user_type]);
+    if (!initialMode) {
+      setDashboardMode(profile.user_type === 'guest' ? 'guest' : 'host');
+    }
+  }, [profile?.id, profile?.user_type, initialMode]);
+
+  useEffect(() => {
+    if (initialMode) setDashboardMode(initialMode);
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialMode, initialTab]);
+
+  function updateDashboardRoute(mode: DashboardMode, tab: DashboardTab) {
+    onRouteChange?.(mode, tab);
+    if (!onRouteChange) {
+      window.history.replaceState({}, '', buildDashboardPath(mode, tab));
+    }
+  }
+
+  function switchMode(mode: DashboardMode) {
+    const nextTab = mode === 'host' ? 'overview' : 'bookings';
+    setDashboardMode(mode);
+    setActiveTab(nextTab);
+    updateDashboardRoute(mode, nextTab);
+  }
+
+  function switchTab(tab: DashboardTab) {
+    setActiveTab(tab);
+    updateDashboardRoute(dashboardMode, tab);
+  }
 
   useEffect(() => {
     if (!profile) return;
@@ -150,13 +190,24 @@ export default function Dashboard({
     window.location.href = '/host-onboarding';
   }
 
-  const tabs: Array<{ id: DashboardTab; label: string; icon: typeof TrendingUp }> = [
+  const hostTabConfig: Array<{ id: DashboardTab; label: string; icon: typeof TrendingUp }> = [
     { id: 'overview', label: 'Overview', icon: TrendingUp },
     { id: 'properties', label: 'Properties', icon: Home },
     { id: 'bookings', label: 'Bookings', icon: Calendar },
+    { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'referrals', label: 'Referrals', icon: Network },
     { id: 'pms', label: 'PMS Integrations', icon: Settings },
   ];
+
+  const guestTabConfig: Array<{ id: DashboardTab; label: string; icon: typeof Calendar }> = [
+    { id: 'bookings', label: 'Trips', icon: Calendar },
+    { id: 'messages', label: 'Messages', icon: MessageSquare },
+  ];
+
+  async function ensureConversationsForCurrentBookings() {
+    const bookings = dashboardMode === 'guest' ? guestBookings : hostBookings;
+    await ensureBookingConversations(bookings);
+  }
 
   function renderBookingCard(booking: BookingWithProperty, perspective: 'guest' | 'host') {
     const title = booking.property?.title || 'Property';
@@ -228,7 +279,7 @@ export default function Dashboard({
               {canHost && (
                 <div className="flex rounded-full border border-gray-200 bg-gray-50 p-1">
                   <button
-                    onClick={() => setDashboardMode('guest')}
+                    onClick={() => switchMode('guest')}
                     className={`rounded-full px-4 py-2 text-sm font-bold transition ${
                       dashboardMode === 'guest'
                         ? 'bg-white text-gray-900 shadow-sm'
@@ -238,7 +289,7 @@ export default function Dashboard({
                     Guest
                   </button>
                   <button
-                    onClick={() => setDashboardMode('host')}
+                    onClick={() => switchMode('host')}
                     className={`rounded-full px-4 py-2 text-sm font-bold transition ${
                       dashboardMode === 'host'
                         ? 'bg-white text-gray-900 shadow-sm'
@@ -294,6 +345,33 @@ export default function Dashboard({
                 </div>
               </div>
 
+              <div className="flex gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm">
+                {guestTabConfig.map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => switchTab(tab.id)}
+                      className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition ${
+                        activeTab === tab.id
+                          ? 'bg-orange-50 text-orange-600'
+                          : 'text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeTab === 'messages' ? (
+                <MessagesPanel
+                  userId={profile!.id}
+                  bookings={guestBookings}
+                  onEnsureConversations={ensureConversationsForCurrentBookings}
+                />
+              ) : (
               <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
                 <h3 className="text-lg font-bold text-gray-900">Your bookings</h3>
                 {guestBookings.length === 0 ? (
@@ -310,6 +388,7 @@ export default function Dashboard({
                   </div>
                 )}
               </div>
+              )}
 
               {!canHost && (
                 <div className="rounded-3xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-8 shadow-sm">
@@ -459,12 +538,12 @@ export default function Dashboard({
               <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
                 <div className="border-b border-gray-100">
                   <div className="flex gap-4 overflow-x-auto px-6">
-                    {tabs.map((tab) => {
+                    {hostTabConfig.map((tab) => {
                       const Icon = tab.icon;
                       return (
                         <button
                           key={tab.id}
-                          onClick={() => setActiveTab(tab.id)}
+                          onClick={() => switchTab(tab.id)}
                           className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-4 font-medium transition ${
                             activeTab === tab.id
                               ? 'border-orange-500 text-orange-600'
@@ -502,6 +581,13 @@ export default function Dashboard({
                             Properties imported from OwnerRez or Guesty sync automatically through PMS Integrations.
                           </p>
                         </div>
+                        <button
+                          onClick={() => setShowAddProperty(true)}
+                          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 px-5 py-2.5 font-semibold text-white shadow-md"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add property
+                        </button>
                       </div>
                       {properties.length === 0 ? (
                         <div className="py-12 text-center">
@@ -630,6 +716,14 @@ export default function Dashboard({
                     </div>
                   )}
 
+                  {activeTab === 'messages' && profile && (
+                    <MessagesPanel
+                      userId={profile.id}
+                      bookings={hostBookings}
+                      onEnsureConversations={ensureConversationsForCurrentBookings}
+                    />
+                  )}
+
                   {activeTab === 'pms' && <PMSSettings />}
                 </div>
               </div>
@@ -637,6 +731,13 @@ export default function Dashboard({
           )}
         </div>
       </div>
+      {showAddProperty && profile && (
+        <AddPropertyModal
+          hostId={profile.id}
+          onClose={() => setShowAddProperty(false)}
+          onCreated={() => void loadDashboardData()}
+        />
+      )}
     </div>
   );
 }

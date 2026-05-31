@@ -1,22 +1,23 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Elements, CardElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
-import { ArrowLeft, CheckCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, Loader2 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { buildDashboardPath } from '../lib/dashboardRoute';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
 type CheckoutFormProps = {
   clientSecret: string;
   bookingId: string;
+  onSuccess: () => void;
 };
 
-function CheckoutForm({ clientSecret, bookingId }: CheckoutFormProps) {
+function CheckoutForm({ clientSecret, bookingId, onSuccess }: CheckoutFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
 
   async function handleSubmit(event: FormEvent) {
@@ -31,9 +32,7 @@ function CheckoutForm({ clientSecret, bookingId }: CheckoutFormProps) {
     setError('');
 
     const result = await stripe.confirmCardPayment(clientSecret, {
-      payment_method: {
-        card,
-      },
+      payment_method: { card },
     });
 
     if (result.error) {
@@ -49,21 +48,10 @@ function CheckoutForm({ clientSecret, bookingId }: CheckoutFormProps) {
           console.error('Booking confirmation failed:', confirmError);
         }
       }
-
-      setConfirmed(true);
+      onSuccess();
     }
 
     setLoading(false);
-  }
-
-  if (confirmed) {
-    return (
-      <div className="rounded-3xl bg-green-50 p-8 text-center">
-        <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
-        <h2 className="mt-5 text-3xl font-extrabold text-green-950">Booking confirmed</h2>
-        <p className="mt-3 text-green-800">Your payment was successful. We will send trip details shortly.</p>
-      </div>
-    );
   }
 
   return (
@@ -86,10 +74,17 @@ function CheckoutForm({ clientSecret, bookingId }: CheckoutFormProps) {
   );
 }
 
-export default function CheckoutPage({ onClose }: { onClose: () => void }) {
+export default function CheckoutPage({
+  onClose,
+  onTripDetails,
+}: {
+  onClose: () => void;
+  onTripDetails?: () => void;
+}) {
   const params = new URLSearchParams(window.location.search);
   const [clientSecret, setClientSecret] = useState('');
   const [bookingId, setBookingId] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [propertyTitle, setPropertyTitle] = useState('');
@@ -100,6 +95,14 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
   const totalAmountCents = Number(params.get('totalAmountCents') || 0);
   const propertyId = params.get('propertyId');
   const hostStripeAccountId = params.get('hostStripeAccountId');
+
+  function goToTripDetails() {
+    if (onTripDetails) {
+      onTripDetails();
+      return;
+    }
+    window.location.href = buildDashboardPath('guest', 'bookings');
+  }
 
   useEffect(() => {
     async function loadSummary() {
@@ -137,10 +140,7 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
 
         const response = await apiRequest<{ clientSecret: string; bookingId: string }>(
           '/api/bookings/create-payment-intent',
-          {
-            method: 'POST',
-            body: payload,
-          }
+          { method: 'POST', body: payload }
         );
 
         setClientSecret(response.clientSecret);
@@ -157,10 +157,44 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
 
   const totalDisplay = totalAmountCents ? (totalAmountCents / 100).toFixed(2) : null;
 
+  if (confirmed) {
+    return (
+      <div className="min-h-screen bg-gray-50 px-4 py-10">
+        <div className="mx-auto max-w-2xl">
+          <div className="rounded-3xl bg-green-50 p-8 text-center shadow-xl">
+            <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
+            <h2 className="mt-5 text-3xl font-extrabold text-green-950">Booking confirmed</h2>
+            <p className="mt-3 text-green-800">
+              Your payment was successful. Trip details are ready in your guest dashboard.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <button
+                onClick={goToTripDetails}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-6 py-4 font-bold text-white shadow-lg"
+              >
+                View trip details
+                <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={onClose}
+                className="rounded-2xl border border-green-200 px-6 py-4 font-bold text-green-900"
+              >
+                Back to explore
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-2xl">
-        <button onClick={onClose} className="mb-8 inline-flex items-center gap-2 font-semibold text-gray-600 hover:text-gray-900">
+        <button
+          onClick={onClose}
+          className="mb-8 inline-flex items-center gap-2 font-semibold text-gray-600 hover:text-gray-900"
+        >
           <ArrowLeft className="h-4 w-4" />
           Back to StayLoop
         </button>
@@ -197,7 +231,11 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
 
             {clientSecret && bookingId && (
               <Elements stripe={stripePromise}>
-                <CheckoutForm clientSecret={clientSecret} bookingId={bookingId} />
+                <CheckoutForm
+                  clientSecret={clientSecret}
+                  bookingId={bookingId}
+                  onSuccess={() => setConfirmed(true)}
+                />
               </Elements>
             )}
           </div>

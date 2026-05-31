@@ -3,7 +3,15 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import type { AuthMode } from './AuthModal';
 
-export type SitePage = 'home' | 'hosts' | 'partners' | 'host-onboarding' | 'host-dashboard' | 'checkout' | 'property';
+export type SitePage =
+  | 'home'
+  | 'hosts'
+  | 'partners'
+  | 'host-onboarding'
+  | 'host-dashboard'
+  | 'checkout'
+  | 'property'
+  | 'dashboard';
 
 export default function Header({
   onShowAuth,
@@ -60,7 +68,7 @@ export default function Header({
             {user ? (
               <div className="flex items-center gap-4">
                 <button
-                  onClick={onShowDashboard}
+                  onClick={() => (onNavigate ? onNavigate('dashboard') : onShowDashboard())}
                   className="flex items-center gap-2 px-4 py-2.5 text-gray-700 hover:text-orange-600 font-semibold transition-colors duration-200 rounded-lg hover:bg-orange-50"
                 >
                   <LayoutDashboard className="w-5 h-5" />
@@ -125,7 +133,7 @@ export default function Header({
               {user ? (
                 <>
                   <button
-                    onClick={onShowDashboard}
+                    onClick={() => (onNavigate ? onNavigate('dashboard') : onShowDashboard())}
                     className="text-left text-gray-700 hover:text-orange-600 font-medium transition"
                   >
                     Dashboard
