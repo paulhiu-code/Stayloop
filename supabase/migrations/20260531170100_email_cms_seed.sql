@@ -1,0 +1,99 @@
+/*
+  Seed StayLoop Email CMS with P0 triggers and professional starter templates.
+*/
+
+CREATE OR REPLACE FUNCTION public.stayloop_email_layout(
+  p_heading text,
+  p_body_html text,
+  p_preheader text DEFAULT '',
+  p_cta_label text DEFAULT NULL,
+  p_cta_url text DEFAULT NULL
+)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+  cta_block text := '';
+BEGIN
+  IF p_cta_label IS NOT NULL AND p_cta_url IS NOT NULL THEN
+    cta_block := format(
+      '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0 8px;"><tr><td align="center" style="border-radius:14px;background:linear-gradient(135deg,#f97316,#f43f5e);"><a href="%s" style="display:inline-block;padding:14px 28px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:14px;">%s</a></td></tr></table>',
+      p_cta_url,
+      p_cta_label
+    );
+  END IF;
+
+  RETURN format(
+    '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>%s</title></head><body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a;"><div style="display:none;max-height:0;overflow:hidden;opacity:0;">%s</div><table role="presentation" width="100%%" cellspacing="0" cellpadding="0" border="0" style="background:#f8fafc;padding:32px 16px;"><tr><td align="center"><table role="presentation" width="100%%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;overflow:hidden;box-shadow:0 20px 45px rgba(15,23,42,0.08);"><tr><td style="padding:28px 32px;background:linear-gradient(135deg,#fff7ed,#fff1f2);border-bottom:1px solid #fed7aa;"><div style="font-size:13px;font-weight:700;letter-spacing:0.24em;text-transform:uppercase;color:#ea580c;">StayLoop</div><h1 style="margin:12px 0 0;font-size:28px;line-height:1.25;color:#0f172a;">%s</h1></td></tr><tr><td style="padding:32px;font-size:16px;line-height:1.7;color:#334155;">%s%s</td></tr><tr><td style="padding:0 32px 32px;font-size:14px;line-height:1.6;color:#64748b;border-top:1px solid #f1f5f9;"><p style="margin:24px 0 8px;">Need help? Reply to this email or visit <a href="{{site_url}}" style="color:#ea580c;">stay-loop.co</a>.</p><p style="margin:0;">© StayLoop · Memorable stays with clear pricing</p></td></tr></table></td></tr></table></body></html>',
+    p_heading,
+    coalesce(p_preheader, p_heading),
+    p_heading,
+    p_body_html,
+    cta_block
+  );
+END;
+$$;
+
+INSERT INTO email_triggers (slug, name, description, category, recipient_role, sort_order, variables_schema) VALUES
+  ('booking.confirmed.guest', 'Booking confirmed (guest)', 'Sent when a booking is confirmed after payment or host acceptance.', 'booking', 'guest', 10, '[{"key":"guest_name","label":"Guest name","sample":"Alex Rivera"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"check_in_date","label":"Check-in date","sample":"June 12, 2026"},{"key":"check_out_date","label":"Check-out date","sample":"June 16, 2026"},{"key":"num_guests","label":"Guest count","sample":"4"},{"key":"total_amount","label":"Total paid","sample":"$1,248.00"},{"key":"confirmation_code","label":"Confirmation code","sample":"SL-8F2K91"},{"key":"manage_booking_url","label":"Manage booking URL","sample":"https://stay-loop.co/dashboard"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('booking.confirmed.host', 'Booking confirmed (host)', 'Notifies the host of a new confirmed reservation.', 'booking', 'host', 11, '[{"key":"host_name","label":"Host name","sample":"Playpark Vacations"},{"key":"guest_name","label":"Guest name","sample":"Alex Rivera"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"check_in_date","label":"Check-in date","sample":"June 12, 2026"},{"key":"check_out_date","label":"Check-out date","sample":"June 16, 2026"},{"key":"host_payout","label":"Host payout","sample":"$1,023.20"},{"key":"manage_booking_url","label":"Manage booking URL","sample":"https://stay-loop.co/dashboard"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('booking.payment.receipt', 'Payment receipt', 'Receipt after successful guest payment.', 'booking', 'guest', 12, '[{"key":"guest_name","label":"Guest name","sample":"Alex Rivera"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"total_amount","label":"Total paid","sample":"$1,248.00"},{"key":"payment_date","label":"Payment date","sample":"May 31, 2026"},{"key":"confirmation_code","label":"Confirmation code","sample":"SL-8F2K91"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('booking.cancelled.guest', 'Booking cancelled (guest)', 'Sent when a booking is cancelled.', 'booking', 'guest', 20, '[{"key":"guest_name","label":"Guest name","sample":"Alex Rivera"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"check_in_date","label":"Check-in date","sample":"June 12, 2026"},{"key":"refund_amount","label":"Refund amount","sample":"$1,248.00"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('booking.cancelled.host', 'Booking cancelled (host)', 'Notifies host that a reservation was cancelled.', 'booking', 'host', 21, '[{"key":"host_name","label":"Host name","sample":"Playpark Vacations"},{"key":"guest_name","label":"Guest name","sample":"Alex Rivera"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"check_in_date","label":"Check-in date","sample":"June 12, 2026"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('booking.reminder.checkin.guest', 'Check-in reminder', 'Reminder before guest arrival.', 'booking', 'guest', 30, '[{"key":"guest_name","label":"Guest name","sample":"Alex Rivera"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"check_in_date","label":"Check-in date","sample":"June 12, 2026"},{"key":"check_in_instructions","label":"Check-in instructions","sample":"Use lockbox code 4821. Parking is on the left side of the driveway."},{"key":"message_host_url","label":"Message host URL","sample":"https://stay-loop.co/dashboard"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('review.request.guest', 'Review request', 'Ask guest to review after checkout.', 'review', 'guest', 40, '[{"key":"guest_name","label":"Guest name","sample":"Alex Rivera"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"review_url","label":"Review URL","sample":"https://stay-loop.co/review/abc123"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('referral.commission.earned', 'Referral commission earned', 'Sent when a referral commission is calculated.', 'referral', 'host', 50, '[{"key":"host_name","label":"Earner name","sample":"Playpark Vacations"},{"key":"referral_amount","label":"Commission amount","sample":"$42.50"},{"key":"referral_level","label":"Referral level","sample":"Level 1"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('message.new.guest', 'New message (guest)', 'Email alert for a new host message.', 'messaging', 'guest', 60, '[{"key":"guest_name","label":"Guest name","sample":"Alex Rivera"},{"key":"host_name","label":"Host name","sample":"Playpark Vacations"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"message_preview","label":"Message preview","sample":"Hi Alex, check-in is anytime after 4 PM."},{"key":"conversation_url","label":"Conversation URL","sample":"https://stay-loop.co/dashboard"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('message.new.host', 'New message (host)', 'Email alert for a new guest message.', 'messaging', 'host', 61, '[{"key":"host_name","label":"Host name","sample":"Playpark Vacations"},{"key":"guest_name","label":"Guest name","sample":"Alex Rivera"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"message_preview","label":"Message preview","sample":"We will arrive around 5:30 PM. Thanks!"},{"key":"conversation_url","label":"Conversation URL","sample":"https://stay-loop.co/dashboard"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('pms.sync.failed', 'PMS sync failed', 'Alert host when PMS sync fails.', 'pms', 'host', 70, '[{"key":"host_name","label":"Host name","sample":"Playpark Vacations"},{"key":"pms_provider","label":"PMS provider","sample":"OwnerRez"},{"key":"sync_error","label":"Error summary","sample":"Calendar sync timed out for 2 properties."},{"key":"pms_settings_url","label":"PMS settings URL","sample":"https://stay-loop.co/dashboard"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('account.welcome.guest', 'Welcome (guest)', 'Welcome email after account verification.', 'onboarding', 'guest', 80, '[{"key":"guest_name","label":"Guest name","sample":"Alex Rivera"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('account.welcome.host', 'Welcome (host)', 'Welcome email for new hosts.', 'onboarding', 'host', 81, '[{"key":"host_name","label":"Host name","sample":"Playpark Vacations"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb),
+  ('payout.sent.host', 'Payout sent', 'Confirms host payout was released.', 'payment', 'host', 90, '[{"key":"host_name","label":"Host name","sample":"Playpark Vacations"},{"key":"payout_amount","label":"Payout amount","sample":"$1,023.20"},{"key":"property_title","label":"Property title","sample":"Lakeview Cabin Retreat"},{"key":"payout_date","label":"Payout date","sample":"June 13, 2026"},{"key":"site_url","label":"Site URL","sample":"https://stay-loop.co"}]'::jsonb)
+ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO email_templates (trigger_id, subject, html_body, text_body, preview_text)
+SELECT
+  t.id,
+  v.subject,
+  public.stayloop_email_layout(v.heading, v.body_html, v.preview_text, v.cta_label, v.cta_url),
+  v.text_body,
+  v.preview_text
+FROM email_triggers t
+JOIN (
+  VALUES
+    ('booking.confirmed.guest', 'Your StayLoop trip is confirmed', 'Your trip is confirmed', '<p>Hi {{guest_name}},</p><p>Your reservation is confirmed for <strong>{{property_title}}</strong>.</p><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0;width:100%%;background:#f8fafc;border-radius:16px;"><tr><td style="padding:18px 20px;font-size:15px;line-height:1.7;color:#334155;"><strong>Check-in:</strong> {{check_in_date}}<br><strong>Check-out:</strong> {{check_out_date}}<br><strong>Guests:</strong> {{num_guests}}<br><strong>Total:</strong> {{total_amount}}<br><strong>Confirmation:</strong> {{confirmation_code}}</td></tr></table><p>We will send check-in details closer to arrival.</p>', 'Your reservation is locked in. We are excited for your stay at {{property_title}}.', 'View trip details', '{{manage_booking_url}}', 'Hi {{guest_name}},\n\nYour StayLoop booking is confirmed.\n\nProperty: {{property_title}}\nCheck-in: {{check_in_date}}\nCheck-out: {{check_out_date}}\nGuests: {{num_guests}}\nTotal: {{total_amount}}\nConfirmation: {{confirmation_code}}\n\nView trip: {{manage_booking_url}}'),
+    ('booking.confirmed.host', 'New StayLoop booking for {{property_title}}', 'New booking received', '<p>Hi {{host_name}},</p><p>You received a new confirmed booking for <strong>{{property_title}}</strong>.</p><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0;width:100%%;background:#f8fafc;border-radius:16px;"><tr><td style="padding:18px 20px;font-size:15px;line-height:1.7;color:#334155;"><strong>Guest:</strong> {{guest_name}}<br><strong>Check-in:</strong> {{check_in_date}}<br><strong>Check-out:</strong> {{check_out_date}}<br><strong>Estimated payout:</strong> {{host_payout}}</td></tr></table><p>Review the reservation and prepare your welcome details.</p>', 'You have a new confirmed reservation on StayLoop.', 'Review booking', '{{manage_booking_url}}', 'Hi {{host_name}},\n\nYou received a new confirmed booking for {{property_title}}.\n\nGuest: {{guest_name}}\nCheck-in: {{check_in_date}}\nCheck-out: {{check_out_date}}\nEstimated payout: {{host_payout}}\n\nReview booking: {{manage_booking_url}}'),
+    ('booking.payment.receipt', 'StayLoop payment receipt', 'Payment receipt', '<p>Hi {{guest_name}},</p><p>Thanks for your payment for <strong>{{property_title}}</strong>.</p><p><strong>Amount paid:</strong> {{total_amount}}<br><strong>Payment date:</strong> {{payment_date}}<br><strong>Confirmation:</strong> {{confirmation_code}}</p>', 'Thanks for your payment. Here is your receipt for {{property_title}}.', NULL, NULL, 'Hi {{guest_name}},\n\nPayment received: {{total_amount}}\nProperty: {{property_title}}\nDate: {{payment_date}}\nConfirmation: {{confirmation_code}}'),
+    ('booking.cancelled.guest', 'Your StayLoop booking was cancelled', 'Booking cancelled', '<p>Hi {{guest_name}},</p><p>Your reservation for <strong>{{property_title}}</strong> starting {{check_in_date}} has been cancelled.</p><p><strong>Refund amount:</strong> {{refund_amount}}</p>', 'Your reservation for {{property_title}} has been cancelled.', 'Browse stays', '{{site_url}}', 'Hi {{guest_name}},\n\nYour booking for {{property_title}} starting {{check_in_date}} was cancelled.\nRefund: {{refund_amount}}'),
+    ('booking.cancelled.host', 'A StayLoop booking was cancelled', 'Booking cancelled', '<p>Hi {{host_name}},</p><p>The booking for <strong>{{property_title}}</strong> with guest {{guest_name}} on {{check_in_date}} has been cancelled.</p><p>Your calendar has been updated automatically.</p>', 'A reservation for {{property_title}} has been cancelled.', 'Open dashboard', '{{site_url}}', 'Hi {{host_name}},\n\nThe booking for {{property_title}} with guest {{guest_name}} on {{check_in_date}} was cancelled.'),
+    ('booking.reminder.checkin.guest', 'Your StayLoop check-in is coming up', 'Check-in reminder', '<p>Hi {{guest_name}},</p><p>Your stay at <strong>{{property_title}}</strong> begins on {{check_in_date}}.</p><p><strong>Check-in instructions</strong><br>{{check_in_instructions}}</p>', 'Your stay at {{property_title}} begins on {{check_in_date}}.', 'Message your host', '{{message_host_url}}', 'Hi {{guest_name}},\n\nCheck-in: {{check_in_date}}\nProperty: {{property_title}}\n\nInstructions:\n{{check_in_instructions}}'),
+    ('review.request.guest', 'How was your stay at {{property_title}}?', 'Tell us about your stay', '<p>Hi {{guest_name}},</p><p>We hope you enjoyed <strong>{{property_title}}</strong>.</p><p>Share a quick review to help future guests choose with confidence.</p>', 'We hope you enjoyed {{property_title}}. Share a quick review to help future guests.', 'Leave a review', '{{review_url}}', 'Hi {{guest_name}},\n\nHow was your stay at {{property_title}}?\nLeave a review: {{review_url}}'),
+    ('referral.commission.earned', 'You earned a StayLoop referral commission', 'Referral commission earned', '<p>Hi {{host_name}},</p><p>Great news — you earned <strong>{{referral_amount}}</strong> from a {{referral_level}} referral booking on {{property_title}}.</p>', 'You earned {{referral_amount}} from a {{referral_level}} referral booking.', 'View earnings', '{{site_url}}', 'Hi {{host_name}},\n\nYou earned {{referral_amount}} from a {{referral_level}} referral on {{property_title}}.'),
+    ('message.new.guest', 'New message from {{host_name}}', 'New message from your host', '<p>Hi {{guest_name}},</p><p><strong>{{host_name}}</strong> sent a new message about {{property_title}}:</p><blockquote style="margin:16px 0;padding:16px 20px;border-left:4px solid #f97316;background:#fff7ed;border-radius:12px;color:#334155;">{{message_preview}}</blockquote>', '{{message_preview}}', 'Open conversation', '{{conversation_url}}', 'Hi {{guest_name}},\n\nNew message about {{property_title}}:\n{{message_preview}}\n\nOpen: {{conversation_url}}'),
+    ('message.new.host', 'New message from {{guest_name}}', 'New guest message', '<p>Hi {{host_name}},</p><p><strong>{{guest_name}}</strong> sent a new message about {{property_title}}:</p><blockquote style="margin:16px 0;padding:16px 20px;border-left:4px solid #f97316;background:#fff7ed;border-radius:12px;color:#334155;">{{message_preview}}</blockquote>', '{{message_preview}}', 'Reply now', '{{conversation_url}}', 'Hi {{host_name}},\n\nNew message from {{guest_name}} about {{property_title}}:\n{{message_preview}}\n\nReply: {{conversation_url}}'),
+    ('pms.sync.failed', 'StayLoop PMS sync needs attention', 'PMS sync failed', '<p>Hi {{host_name}},</p><p>We could not complete your latest <strong>{{pms_provider}}</strong> sync.</p><p style="padding:14px 16px;background:#fff1f2;border-radius:12px;color:#be123c;"><strong>Error:</strong> {{sync_error}}</p>', 'We could not complete your latest {{pms_provider}} sync.', 'Review PMS settings', '{{pms_settings_url}}', 'Hi {{host_name}},\n\nPMS sync failed for {{pms_provider}}.\nError: {{sync_error}}\n\nReview settings: {{pms_settings_url}}'),
+    ('account.welcome.guest', 'Welcome to StayLoop', 'Welcome to StayLoop', '<p>Hi {{guest_name}},</p><p>Welcome to StayLoop — verified stays, transparent pricing, and a booking experience built for memorable trips.</p>', 'Start exploring verified stays with transparent pricing and secure booking.', 'Explore stays', '{{site_url}}', 'Hi {{guest_name}},\n\nWelcome to StayLoop. Start exploring memorable stays at {{site_url}}'),
+    ('account.welcome.host', 'Welcome to hosting on StayLoop', 'Welcome, host', '<p>Hi {{host_name}},</p><p>Welcome to StayLoop hosting. List your property, connect your calendar, and start welcoming guests with professional tools and clear payouts.</p>', 'List your property, connect your calendar, and start welcoming guests.', 'Open host dashboard', '{{site_url}}', 'Hi {{host_name}},\n\nWelcome to StayLoop hosting. Open your dashboard at {{site_url}}'),
+    ('payout.sent.host', 'Your StayLoop payout is on the way', 'Payout sent', '<p>Hi {{host_name}},</p><p>We sent <strong>{{payout_amount}}</strong> for <strong>{{property_title}}</strong> on {{payout_date}}.</p>', 'We sent {{payout_amount}} for {{property_title}}.', 'View payout details', '{{site_url}}', 'Hi {{host_name}},\n\nPayout sent: {{payout_amount}}\nProperty: {{property_title}}\nDate: {{payout_date}}')
+) AS v(slug, subject, heading, body_html, preview_text, cta_label, cta_url, text_body)
+  ON t.slug = v.slug
+ON CONFLICT (trigger_id) DO NOTHING;
+
+INSERT INTO email_sequences (slug, name, description, anchor_trigger_id, is_active)
+SELECT 'booking.lifecycle', 'Booking lifecycle', 'Confirmation, pre-arrival reminders, and review request.', id, true
+FROM email_triggers WHERE slug = 'booking.confirmed.guest'
+ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO email_sequence_steps (sequence_id, trigger_id, step_order, delay_interval, delay_anchor)
+SELECT s.id, t.id, steps.step_order, steps.delay_interval, steps.delay_anchor
+FROM email_sequences s
+JOIN (
+  VALUES
+    ('booking.lifecycle', 'booking.confirmed.guest', 0, interval '0 seconds', 'trigger'),
+    ('booking.lifecycle', 'booking.reminder.checkin.guest', 1, interval '-7 days', 'check_in'),
+    ('booking.lifecycle', 'review.request.guest', 2, interval '1 day', 'check_out')
+) AS steps(sequence_slug, trigger_slug, step_order, delay_interval, delay_anchor)
+  ON s.slug = steps.sequence_slug
+JOIN email_triggers t ON t.slug = steps.trigger_slug
+ON CONFLICT (sequence_id, step_order) DO NOTHING;

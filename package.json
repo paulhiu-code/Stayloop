@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "seed:email-cms": "node scripts/seed-email-cms.mjs"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.3.0",
