@@ -236,7 +236,7 @@ async function main() {
   const accessToken = await getHostAccessToken(connection.user_id);
   console.log('Host session acquired\n');
 
-  for (const action of ['sync_properties', 'sync_bookings']) {
+  for (const action of ['sync_properties']) {
     console.log(`── Invoking ${action} ──`);
     const result = await invokeSync(accessToken, action);
     console.log(`HTTP ${result.status} in ${result.elapsedMs}ms`);
@@ -246,6 +246,23 @@ async function main() {
     }
     console.log('');
   }
+
+  console.log('── Invoking sync_bookings per property ──');
+  for (const mapping of mappings || []) {
+    const result = await invokeSync(accessToken, 'sync_bookings', {
+      propertyId: String(mapping.pms_property_id),
+    });
+    console.log(
+      `Bookings ${mapping.pms_property_id}: HTTP ${result.status} in ${result.elapsedMs}ms`,
+      result.body?.success ? result.body.result : result.body?.error || result.body
+    );
+    if (!result.body?.success) {
+      throw new Error(
+        `sync_bookings failed for ${mapping.pms_property_id}: ${result.body?.error || 'unknown error'}`
+      );
+    }
+  }
+  console.log('');
 
   console.log('── Invoking sync_availability per property ──');
   for (const mapping of mappings || []) {
