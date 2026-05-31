@@ -11,14 +11,16 @@ function getPropertyMeta(property: PropertyCardData) {
       reviewCount: property.reviewCount,
       collection: property.collection,
       badges: property.badges,
+      isNewListing: false,
     };
   }
 
   return {
-    rating: 4.9,
-    reviewCount: 50,
+    rating: null,
+    reviewCount: 0,
     collection: property.property_type.replace(/_/g, ' '),
     badges: property.is_active ? ['Verified'] : [],
+    isNewListing: true,
   };
 }
 
@@ -56,10 +58,14 @@ export default function PropertyCard({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent opacity-80"></div>
         <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-xl shadow-xl border border-white/50">
-          <div className="flex items-center gap-1.5">
-            <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-            <span className="text-sm font-bold text-gray-900">{meta.rating.toFixed(2)}</span>
-          </div>
+          {meta.isNewListing ? (
+            <span className="text-sm font-bold text-gray-900">New listing</span>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+              <span className="text-sm font-bold text-gray-900">{meta.rating?.toFixed(2)}</span>
+            </div>
+          )}
         </div>
         {property.instant_book && (
           <div className="absolute top-4 left-4 inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xl border border-white/20">
@@ -83,7 +89,9 @@ export default function PropertyCard({
       <div className="p-6">
         <div className="mb-3 flex items-center justify-between gap-3 text-sm">
           <span className="font-bold uppercase tracking-[0.18em] text-orange-600">{meta.collection}</span>
-          <span className="text-gray-500">{meta.reviewCount} reviews</span>
+          {!meta.isNewListing && (
+            <span className="text-gray-500">{meta.reviewCount} reviews</span>
+          )}
         </div>
 
         <div className="flex items-start justify-between mb-4">

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Elements, CardElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
-import { ArrowLeft, CheckCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { supabase } from '../lib/supabase';
 
@@ -9,13 +9,14 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 
 
 type CheckoutFormProps = {
   clientSecret: string;
+  bookingId: string;
+  onConfirmed: (bookingId: string) => void;
 };
 
-function CheckoutForm({ clientSecret }: CheckoutFormProps) {
+function CheckoutForm({ clientSecret, bookingId, onConfirmed }: CheckoutFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
 
   async function handleSubmit(event: FormEvent) {
@@ -37,21 +38,21 @@ function CheckoutForm({ clientSecret }: CheckoutFormProps) {
 
     if (result.error) {
       setError(result.error.message || 'Payment failed.');
-    } else if (result.paymentIntent?.status === 'succeeded') {
-      setConfirmed(true);
+      setLoading(false);
+      return;
+    }
+
+    if (result.paymentIntent?.status === 'succeeded') {
+      try {
+        await apiRequest(`/api/bookings/${bookingId}/confirm`, { method: 'POST' });
+      } catch (confirmError) {
+        console.warn('Booking confirm fallback failed; webhook may still finalize status.', confirmError);
+      }
+
+      onConfirmed(bookingId);
     }
 
     setLoading(false);
-  }
-
-  if (confirmed) {
-    return (
-      <div className="rounded-3xl bg-green-50 p-8 text-center">
-        <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
-        <h2 className="mt-5 text-3xl font-extrabold text-green-950">Booking confirmed</h2>
-        <p className="mt-3 text-green-800">Your payment was successful. We will send trip details shortly.</p>
-      </div>
-    );
   }
 
   return (
@@ -74,9 +75,16 @@ function CheckoutForm({ clientSecret }: CheckoutFormProps) {
   );
 }
 
-export default function CheckoutPage({ onClose }: { onClose: () => void }) {
+export default function CheckoutPage({
+  onClose,
+  onBookingConfirmed,
+}: {
+  onClose: () => void;
+  onBookingConfirmed: (bookingId: string) => void;
+}) {
   const params = new URLSearchParams(window.location.search);
   const [clientSecret, setClientSecret] = useState('');
+  const [bookingId, setBookingId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [propertyTitle, setPropertyTitle] = useState('');
@@ -85,6 +93,11 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
   const checkOut = params.get('checkOut');
   const numGuests = params.get('numGuests');
   const totalAmountCents = Number(params.get('totalAmountCents') || 0);
+  const baseAmountCents = Number(params.get('baseAmountCents') || 0);
+  const cleaningFeeCents = Number(params.get('cleaningFeeCents') || 0);
+  const guestServiceFeeCents = Number(params.get('guestServiceFeeCents') || 0);
+  const hostServiceFeeCents = Number(params.get('hostServiceFeeCents') || 0);
+  const totalNights = Number(params.get('totalNights') || 0);
   const propertyId = params.get('propertyId');
   const hostStripeAccountId = params.get('hostStripeAccountId');
 
@@ -120,14 +133,23 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
           checkIn,
           checkOut,
           numGuests: Number(numGuests || 1),
+          baseAmountCents,
+          cleaningFeeCents,
+          guestServiceFeeCents,
+          hostServiceFeeCents,
+          totalNights: totalNights || undefined,
         };
 
-        const response = await apiRequest<{ clientSecret: string }>('/api/bookings/create-payment-intent', {
-          method: 'POST',
-          body: payload,
-        });
+        const response = await apiRequest<{ clientSecret: string; bookingId: string }>(
+          '/api/bookings/create-payment-intent',
+          {
+            method: 'POST',
+            body: payload,
+          }
+        );
 
         setClientSecret(response.clientSecret);
+        setBookingId(response.bookingId);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to start checkout.');
       } finally {
@@ -178,9 +200,13 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
 
             {error && <div className="rounded-2xl bg-rose-50 p-4 text-rose-700">{error}</div>}
 
-            {clientSecret && (
+            {clientSecret && bookingId && (
               <Elements stripe={stripePromise}>
-                <CheckoutForm clientSecret={clientSecret} />
+                <CheckoutForm
+                  clientSecret={clientSecret}
+                  bookingId={bookingId}
+                  onConfirmed={onBookingConfirmed}
+                />
               </Elements>
             )}
           </div>

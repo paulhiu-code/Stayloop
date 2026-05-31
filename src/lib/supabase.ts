@@ -75,6 +75,10 @@ export type Booking = {
   host_payout: number;
   status: 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled';
   payment_intent_id: string | null;
+  stripe_payment_intent_id?: string | null;
+  total_amount_cents?: number | null;
+  platform_fee_amount?: number | null;
+  payout_status?: 'pending' | 'released' | 'failed';
   payout_date: string | null;
   created_at: string;
   updated_at: string;

@@ -7,13 +7,15 @@ export type ShowcaseProperty = Property & {
   badges: string[];
 };
 
+export const DEMO_HOST_ID = '11111111-1111-1111-1111-111111111101';
+
 export const showcaseProperties: ShowcaseProperty[] = [
   {
-    id: 'desert-glass-house',
-    host_id: 'demo-host-1',
+    id: '22222222-2222-2222-2222-222222222201',
+    host_id: DEMO_HOST_ID,
     title: 'Desert glass house with canyon views',
     description: 'A private architectural retreat built for sunrise coffee, stargazing, and quiet weekends.',
-    property_type: 'unique_stay',
+    property_type: 'other',
     address: 'Private Road',
     city: 'Sedona',
     state: 'AZ',
@@ -44,11 +46,11 @@ export const showcaseProperties: ShowcaseProperty[] = [
     badges: ['Verified', 'Rare find'],
   },
   {
-    id: 'savannah-townhome',
-    host_id: 'demo-host-2',
+    id: '22222222-2222-2222-2222-222222222202',
+    host_id: DEMO_HOST_ID,
     title: 'Historic townhome near Forsyth Park',
     description: 'A warm city escape with hotel-grade linens, walkable dining, and a shaded courtyard.',
-    property_type: 'entire_home',
+    property_type: 'house',
     address: 'Historic District',
     city: 'Savannah',
     state: 'GA',
@@ -79,11 +81,11 @@ export const showcaseProperties: ShowcaseProperty[] = [
     badges: ['Verified', 'Guest favorite'],
   },
   {
-    id: 'aspen-lodge-suite',
-    host_id: 'demo-host-3',
+    id: '22222222-2222-2222-2222-222222222203',
+    host_id: DEMO_HOST_ID,
     title: 'Boutique lodge room steps from the lifts',
     description: 'A polished hotel-room stay with daily service, mountain access, and a fireplace lounge.',
-    property_type: 'hotel_room',
+    property_type: 'other',
     address: 'Base Village',
     city: 'Aspen',
     state: 'CO',
@@ -114,11 +116,11 @@ export const showcaseProperties: ShowcaseProperty[] = [
     badges: ['Instant book', 'Verified'],
   },
   {
-    id: 'outer-banks-beach-house',
-    host_id: 'demo-host-4',
+    id: '22222222-2222-2222-2222-222222222204',
+    host_id: DEMO_HOST_ID,
     title: 'Oceanfront family home with private deck',
     description: 'Room for the whole crew, direct beach access, and everything set up for longer stays.',
-    property_type: 'entire_home',
+    property_type: 'house',
     address: 'Ocean Drive',
     city: 'Outer Banks',
     state: 'NC',
@@ -149,11 +151,11 @@ export const showcaseProperties: ShowcaseProperty[] = [
     badges: ['Family ready', 'Verified'],
   },
   {
-    id: 'austin-work-ready-bungalow',
-    host_id: 'demo-host-5',
+    id: '22222222-2222-2222-2222-222222222205',
+    host_id: DEMO_HOST_ID,
     title: 'Work-ready bungalow near South Congress',
     description: 'Fast Wi-Fi, a quiet office, fenced yard, and easy access to Austin restaurants and music.',
-    property_type: 'entire_home',
+    property_type: 'house',
     address: 'South Congress',
     city: 'Austin',
     state: 'TX',
@@ -184,8 +186,8 @@ export const showcaseProperties: ShowcaseProperty[] = [
     badges: ['Work ready', 'Verified'],
   },
   {
-    id: 'lake-tahoe-cabin',
-    host_id: 'demo-host-6',
+    id: '22222222-2222-2222-2222-222222222206',
+    host_id: DEMO_HOST_ID,
     title: 'Modern cabin between lake and trails',
     description: 'A cozy four-season cabin with a cedar sauna, gear storage, and trail access nearby.',
     property_type: 'cabin',

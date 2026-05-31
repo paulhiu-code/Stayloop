@@ -11,6 +11,7 @@ import HostOnboarding from './components/HostOnboarding';
 import HostDashboard from './components/HostDashboard';
 import CheckoutPage from './components/CheckoutPage';
 import PropertyDetailPage from './components/PropertyDetailPage';
+import BookingConfirmationPage from './components/BookingConfirmationPage';
 import { supabase, Property } from './lib/supabase';
 import { showcaseProperties } from './data/showcase';
 
@@ -67,12 +68,18 @@ function propertyIdFromPath(path: string): string | null {
   return match?.[1] || null;
 }
 
+function bookingIdFromPath(path: string): string | null {
+  const match = path.match(/^\/booking\/([^/]+)/);
+  return match?.[1] || null;
+}
+
 function pageFromPath(path: string): SitePage {
   if (path === '/hosts') return 'hosts';
   if (path === '/partners') return 'partners';
   if (path === '/host-onboarding') return 'host-onboarding';
   if (path === '/host-dashboard') return 'host-dashboard';
   if (path === '/checkout') return 'checkout';
+  if (bookingIdFromPath(path)) return 'booking';
   if (propertyIdFromPath(path)) return 'property';
   return 'home';
 }
@@ -86,6 +93,7 @@ function pathFromPage(page: SitePage, propertyId?: string) {
     return window.location.search ? `/checkout${window.location.search}` : '/checkout';
   }
   if (page === 'property' && propertyId) return `/property/${propertyId}`;
+  if (page === 'booking' && propertyId) return `/booking/${propertyId}`;
   return '/';
 }
 
@@ -98,6 +106,7 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [propertyId, setPropertyId] = useState<string | null>(() => propertyIdFromPath(window.location.pathname));
+  const [bookingId, setBookingId] = useState<string | null>(() => bookingIdFromPath(window.location.pathname));
   const marketCarouselRef = useRef<HTMLDivElement>(null);
   const { user, loading: authLoading } = useAuth();
 
@@ -105,6 +114,7 @@ function AppContent() {
     const handlePopState = () => {
       setPage(pageFromPath(window.location.pathname));
       setPropertyId(propertyIdFromPath(window.location.pathname));
+      setBookingId(bookingIdFromPath(window.location.pathname));
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -153,8 +163,13 @@ function AppContent() {
     setPage(nextPage);
     if (nextPage === 'property' && options?.propertyId) {
       setPropertyId(options.propertyId);
-    } else if (nextPage !== 'property') {
+      setBookingId(null);
+    } else if (nextPage === 'booking' && options?.propertyId) {
+      setBookingId(options.propertyId);
       setPropertyId(null);
+    } else if (nextPage !== 'property' && nextPage !== 'booking') {
+      setPropertyId(null);
+      setBookingId(null);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -165,6 +180,10 @@ function AppContent() {
 
   function goToCheckout(path: string) {
     navigate('checkout', { path });
+  }
+
+  function goToBookingConfirmation(id: string) {
+    navigate('booking', { propertyId: id });
   }
 
   function openAuth(mode: AuthMode = 'signin') {
@@ -210,7 +229,22 @@ function AppContent() {
   }
 
   if (page === 'checkout') {
-    return <CheckoutPage onClose={() => navigate('home')} />;
+    return (
+      <CheckoutPage
+        onClose={() => navigate('home')}
+        onBookingConfirmed={goToBookingConfirmation}
+      />
+    );
+  }
+
+  if (page === 'booking' && bookingId) {
+    return (
+      <BookingConfirmationPage
+        bookingId={bookingId}
+        onClose={() => navigate('home')}
+        onViewProperty={viewProperty}
+      />
+    );
   }
 
   if (page === 'property' && propertyId) {
