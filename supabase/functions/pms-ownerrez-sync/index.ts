@@ -375,10 +375,7 @@ async function fetchBlockedDatesFromV2Bookings(
   const blocked = new Set<string>();
   const today = formatDateOnly(new Date());
   const end = formatDateOnly(addDays(new Date(), PRICING_SYNC_DAYS));
-  const paths = [
-    `/properties/${propertyId}/bookings?from=${today}&to=${end}`,
-    `/bookings?property_ids=${propertyId}&from=${today}&to=${end}`,
-  ];
+  const paths = [`/bookings?property_ids=${propertyId}&from=${today}&to=${end}&include_guest=true`];
 
   for (const path of paths) {
     const bookings = await fetchAllOwnerRezItems(connection, token, path);
@@ -417,47 +414,68 @@ async function fetchBlockedDates(
   return blocked;
 }
 
-async function fetchCleaningFeeFromQuote(
+async function fetchOwnerRezPropertyDetail(
   connection: Record<string, unknown>,
   token: string,
   propertyId: string
-): Promise<number> {
-  const arrival = formatDateOnly(addDays(new Date(), 14));
-  const departure = formatDateOnly(addDays(new Date(), 17));
+): Promise<Record<string, unknown>> {
+  return fetchOwnerRezJson(connection, token, `/properties/${propertyId}?include_fields=true`);
+}
 
-  const response = await ownerRezFetch(connection, token, '/quotes', {
-    method: 'POST',
-    body: JSON.stringify({
-      property_id: Number(propertyId),
-      arrival,
-      departure,
-      adults: 2,
-      generate_charges: true,
-      test: true,
-      validate_rules: false,
-    }),
-  });
-
-  if (!response.ok) {
-    return 0;
-  }
-
-  const quote = (await response.json()) as Record<string, unknown>;
-  const charges = Array.isArray(quote.charges) ? quote.charges : [];
-
-  for (const charge of charges) {
-    if (!charge || typeof charge !== 'object') continue;
-    const row = charge as Record<string, unknown>;
-    const type = String(row.type ?? '').toLowerCase();
-    const description = String(row.description ?? '').toLowerCase();
-    const amount = Number(row.amount ?? 0);
-
-    if (amount > 0 && (type.includes('clean') || description.includes('cleaning'))) {
-      return Number(amount.toFixed(2));
+async function tryFetchOwnerRezListing(
+  connection: Record<string, unknown>,
+  token: string,
+  propertyId: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const response = await ownerRezFetch(
+      connection,
+      token,
+      `/listings?property_ids=${encodeURIComponent(propertyId)}&includeImages=true&includeDescriptions=true&includeAmenities=true`
+    );
+    if (response.status === 402) {
+      console.warn(`OwnerRez listings API unavailable for property ${propertyId} (premium feature disabled)`);
+      return null;
     }
+    if (!response.ok) {
+      return null;
+    }
+    const page = (await response.json()) as Record<string, unknown>;
+    const items = (page.items as Record<string, unknown>[]) || [];
+    return (
+      items.find((item) => String(item.property_id ?? item.id ?? '') === String(propertyId)) ||
+      items[0] ||
+      null
+    );
+  } catch (error) {
+    console.warn(`OwnerRez listings fetch failed for property ${propertyId}:`, error);
+    return null;
   }
+}
 
-  return 0;
+async function fetchOwnerRezGuestContact(
+  connection: Record<string, unknown>,
+  token: string,
+  guestId: string | number
+): Promise<{ guest_email: string | null; guest_phone: string | null }> {
+  try {
+    const guest = await fetchOwnerRezJson(connection, token, `/guests/${guestId}`);
+    const emails = Array.isArray(guest.email_addresses) ? guest.email_addresses : [];
+    const phones = Array.isArray(guest.phone_numbers) ? guest.phone_numbers : [];
+    const defaultEmail = emails.find((row) => row && typeof row === 'object' && (row as Record<string, unknown>).is_default);
+    const defaultPhone = phones.find((row) => row && typeof row === 'object' && (row as Record<string, unknown>).is_default);
+    const emailRow = (defaultEmail || emails[0]) as Record<string, unknown> | undefined;
+    const phoneRow = (defaultPhone || phones[0]) as Record<string, unknown> | undefined;
+
+    return {
+      guest_email: typeof emailRow?.address === 'string' ? emailRow.address : null,
+      guest_phone:
+        (typeof phoneRow?.number === 'string' && phoneRow.number) ||
+        (typeof phoneRow?.phone === 'string' ? phoneRow.phone : null),
+    };
+  } catch {
+    return { guest_email: null, guest_phone: null };
+  }
 }
 
 async function syncOwnerRezPricingAndCalendar(
@@ -525,7 +543,8 @@ async function syncOwnerRezPricingAndCalendar(
 
   const basePrice = deriveBasePrice(pricingNights);
   const minNights = deriveMinNights(pricingNights);
-  const cleaningFee = await fetchCleaningFeeFromQuote(connection, token, pmsPropertyId).catch(() => 0);
+  // Pull-only: never POST test quotes to OwnerRez during calendar sync.
+  const cleaningFee = 0;
 
   const propertyUpdate: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -564,8 +583,20 @@ async function syncOwnerRezPricingAndCalendar(
   };
 }
 
-function mapOwnerRezProperty(prop: Record<string, unknown>, connection: Record<string, unknown>) {
-  const addr = (prop.address as Record<string, unknown>) || {};
+function mapOwnerRezProperty(
+  prop: Record<string, unknown>,
+  connection: Record<string, unknown>,
+  enrichment?: {
+    detail?: Record<string, unknown> | null;
+    listing?: Record<string, unknown> | null;
+  }
+) {
+  const merged = {
+    ...prop,
+    ...(enrichment?.detail || {}),
+  };
+
+  const addr = (merged.address as Record<string, unknown>) || {};
   const street1 = typeof addr.street1 === 'string' ? addr.street1 : '';
   const street2 = typeof addr.street2 === 'string' ? addr.street2 : '';
   const addressLine =
@@ -573,39 +604,94 @@ function mapOwnerRezProperty(prop: Record<string, unknown>, connection: Record<s
     (typeof addr.address === 'string' ? addr.address : 'Address on file');
 
   const images: string[] = [];
-  for (const key of ['thumbnail_url_large', 'thumbnail_url', 'thumbnail_url_medium']) {
-    const value = prop[key];
-    if (typeof value === 'string' && value.length > 0) {
-      images.push(value);
+  const listingImages = enrichment?.listing?.images;
+  if (Array.isArray(listingImages)) {
+    for (const image of listingImages) {
+      if (typeof image === 'string' && image.length > 0) {
+        images.push(image);
+        continue;
+      }
+      if (image && typeof image === 'object') {
+        const row = image as Record<string, unknown>;
+        for (const key of ['large_url', 'original_url', 'url', 'thumbnail_url']) {
+          const value = row[key];
+          if (typeof value === 'string' && value.length > 0) {
+            images.push(value);
+            break;
+          }
+        }
+      }
+    }
+  }
+  if (images.length === 0) {
+    for (const key of ['thumbnail_url_large', 'thumbnail_url', 'thumbnail_url_medium']) {
+      const value = merged[key];
+      if (typeof value === 'string' && value.length > 0) {
+        images.push(value);
+      }
     }
   }
 
-  let propertyType = typeof prop.property_type === 'string' ? prop.property_type.toLowerCase() : 'house';
+  const amenities: string[] = [];
+  const listingAmenities = enrichment?.listing?.amenities;
+  if (Array.isArray(listingAmenities)) {
+    for (const amenity of listingAmenities) {
+      if (typeof amenity === 'string' && amenity.trim()) {
+        amenities.push(amenity.trim());
+      } else if (amenity && typeof amenity === 'object') {
+        const name = (amenity as Record<string, unknown>).name;
+        if (typeof name === 'string' && name.trim()) {
+          amenities.push(name.trim());
+        }
+      }
+    }
+  }
+
+  let description =
+    typeof merged.public_url === 'string'
+      ? `Imported from OwnerRez. View listing: ${merged.public_url}`
+      : 'Imported from OwnerRez.';
+  const listingDescriptions = enrichment?.listing?.descriptions;
+  if (Array.isArray(listingDescriptions) && listingDescriptions.length > 0) {
+    const parts: string[] = [];
+    for (const entry of listingDescriptions) {
+      if (typeof entry === 'string' && entry.trim()) {
+        parts.push(entry.trim());
+      } else if (entry && typeof entry === 'object') {
+        const row = entry as Record<string, unknown>;
+        const textValue = row.text ?? row.description ?? row.body;
+        if (typeof textValue === 'string' && textValue.trim()) {
+          parts.push(textValue.trim());
+        }
+      }
+    }
+    if (parts.length > 0) {
+      description = parts.join('\n\n');
+    }
+  }
+
+  let propertyType = typeof merged.property_type === 'string' ? merged.property_type.toLowerCase() : 'house';
   const allowedTypes = new Set([
-    'house',
-    'apartment',
-    'condo',
-    'villa',
-    'cabin',
-    'cottage',
-    'townhouse',
-    'loft',
-    'other',
+    'house', 'apartment', 'condo', 'villa', 'cabin', 'cottage', 'townhouse', 'loft', 'other',
+    'entire_home', 'private_room', 'shared_room', 'hotel_room', 'unique_stay', 'studio',
+    'bungalow', 'chalet', 'farm_stay',
   ]);
   if (!allowedTypes.has(propertyType)) {
     propertyType = 'other';
   }
 
+  const listingCancellation =
+    typeof enrichment?.listing?.cancellation_policy === 'string'
+      ? enrichment.listing.cancellation_policy
+      : null;
+
   return {
     host_id: connection.user_id,
     title:
-      (typeof prop.name === 'string' && prop.name) ||
-      (typeof prop.external_name === 'string' && prop.external_name) ||
+      (typeof merged.name === 'string' && merged.name) ||
+      (typeof merged.external_name === 'string' && merged.external_name) ||
       'OwnerRez Property',
-    description:
-      typeof prop.public_url === 'string'
-        ? `Imported from OwnerRez. View listing: ${prop.public_url}`
-        : 'Imported from OwnerRez.',
+    description,
     property_type: propertyType,
     address: addressLine,
     city: (typeof addr.city === 'string' && addr.city) || 'Unknown',
@@ -615,29 +701,30 @@ function mapOwnerRezProperty(prop: Record<string, unknown>, connection: Record<s
       'N/A',
     country: (typeof addr.country === 'string' && addr.country) || 'US',
     postal_code: typeof addr.postal_code === 'string' ? addr.postal_code : null,
-    latitude: typeof prop.latitude === 'number' ? prop.latitude : null,
-    longitude: typeof prop.longitude === 'number' ? prop.longitude : null,
-    bedrooms: typeof prop.bedrooms === 'number' ? prop.bedrooms : 1,
-    bathrooms: typeof prop.bathrooms === 'number' ? prop.bathrooms : 1,
-    max_guests: typeof prop.max_guests === 'number' ? prop.max_guests : 2,
-    max_adults: typeof prop.max_adults === 'number' ? prop.max_adults : null,
-    max_children: typeof prop.max_children === 'number' ? prop.max_children : null,
-    max_pets: typeof prop.max_pets === 'number' ? prop.max_pets : null,
-    check_in_time: typeof prop.check_in === 'string' ? prop.check_in : null,
-    check_out_time: typeof prop.check_out === 'string' ? prop.check_out : null,
-    currency_code: typeof prop.currency_code === 'string' ? prop.currency_code : 'USD',
-    timezone: typeof prop.time_zone === 'string' ? prop.time_zone : null,
+    latitude: typeof merged.latitude === 'number' ? merged.latitude : null,
+    longitude: typeof merged.longitude === 'number' ? merged.longitude : null,
+    bedrooms: typeof merged.bedrooms === 'number' ? merged.bedrooms : 1,
+    bathrooms: typeof merged.bathrooms === 'number' ? merged.bathrooms : 1,
+    max_guests: typeof merged.max_guests === 'number' ? merged.max_guests : 2,
+    max_adults: typeof merged.max_adults === 'number' ? merged.max_adults : null,
+    max_children: typeof merged.max_children === 'number' ? merged.max_children : null,
+    max_pets: typeof merged.max_pets === 'number' ? merged.max_pets : null,
+    check_in_time: typeof merged.check_in === 'string' ? merged.check_in : null,
+    check_out_time: typeof merged.check_out === 'string' ? merged.check_out : null,
+    currency_code: typeof merged.currency_code === 'string' ? merged.currency_code : 'USD',
+    timezone: typeof merged.time_zone === 'string' ? merged.time_zone : null,
+    cancellation_policy: listingCancellation,
     base_price: 0,
     cleaning_fee: 0,
-    amenities: [],
+    amenities,
     images,
-    is_active: prop.active !== false,
-    external_pms_property_id: String(prop.id),
+    is_active: merged.active !== false,
+    external_pms_property_id: String(merged.id),
     external_pms_provider: 'ownerrez',
     synced_at: new Date().toISOString(),
     pms_integration: {
       provider: 'ownerrez',
-      property_id: String(prop.id),
+      property_id: String(merged.id),
       last_synced: new Date().toISOString(),
     },
   };
@@ -672,7 +759,62 @@ function extractOwnerRezGuestInfo(booking: Record<string, unknown>) {
 }
 
 function ownerRezBookingQuerySuffix(): string {
-  return '?include_guest=true&include_charges=true';
+  return 'include_guest=true&include_charges=true';
+}
+
+function buildOwnerRezBookingsPath(propertyId?: string): string {
+  const suffix = ownerRezBookingQuerySuffix();
+  if (propertyId) {
+    return `/bookings?property_ids=${encodeURIComponent(propertyId)}&${suffix}`;
+  }
+
+  const since = new Date();
+  since.setFullYear(since.getFullYear() - 2);
+  return `/bookings?since_utc=${encodeURIComponent(since.toISOString())}&${suffix}`;
+}
+
+function calculateOwnerRezBookingNights(booking: Record<string, unknown>): number {
+  if (typeof booking.nights === 'number' && booking.nights > 0) {
+    return booking.nights;
+  }
+
+  const arrival = booking.arrival ?? booking.check_in;
+  const departure = booking.departure ?? booking.check_out;
+  if (arrival == null || departure == null) {
+    return 1;
+  }
+
+  const start = new Date(`${normalizeDateOnly(arrival)}T12:00:00`);
+  const end = new Date(`${normalizeDateOnly(departure)}T12:00:00`);
+  const nights = Math.round((end.getTime() - start.getTime()) / 86400000);
+  return nights > 0 ? nights : 1;
+}
+
+function calculateOwnerRezBookingAmounts(booking: Record<string, unknown>) {
+  const total = Number(booking.total_amount ?? booking.total ?? 0);
+  const charges = Array.isArray(booking.charges) ? booking.charges : [];
+  let cleaningFee = 0;
+
+  for (const charge of charges) {
+    if (!charge || typeof charge !== 'object') continue;
+    const row = charge as Record<string, unknown>;
+    const type = String(row.type ?? '').toLowerCase();
+    const description = String(row.description ?? '').toLowerCase();
+    const amount = Number(row.amount ?? 0);
+    if (amount > 0 && (type.includes('clean') || description.includes('cleaning'))) {
+      cleaningFee += amount;
+    }
+  }
+
+  const guestServiceFee = Number((total * 0.05).toFixed(2));
+  const hostServiceFee = Number((total * 0.1).toFixed(2));
+
+  return {
+    total,
+    cleaningFee: Number(cleaningFee.toFixed(2)),
+    guestServiceFee,
+    hostServiceFee,
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -875,7 +1017,11 @@ async function syncProperties(supabase: any, connection: any, token: string) {
         .eq('pms_property_id', pmsPropertyId)
         .maybeSingle();
 
-      const propertyData = mapOwnerRezProperty(prop, connection);
+      const [detail, listing] = await Promise.all([
+        fetchOwnerRezPropertyDetail(connection, token, pmsPropertyId).catch(() => null),
+        tryFetchOwnerRezListing(connection, token, pmsPropertyId),
+      ]);
+      const propertyData = mapOwnerRezProperty(prop, connection, { detail, listing });
       let stayloopPropertyId: string | null = mapping?.stayloop_property_id ?? null;
 
       if (mapping) {
@@ -942,16 +1088,18 @@ async function syncProperties(supabase: any, connection: any, token: string) {
 }
 
 async function syncBookings(supabase: any, connection: any, token: string, propertyId?: string) {
-  const path = propertyId ? `/properties/${propertyId}/bookings` : '/bookings';
-  const bookings = await fetchAllOwnerRezItems(connection, token, path);
+  const bookings = await fetchAllOwnerRezItems(connection, token, buildOwnerRezBookingsPath(propertyId));
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
+  const guestContactCache = new Map<string, { guest_email: string | null; guest_phone: string | null }>();
 
   for (const booking of bookings) {
     processed++;
     try {
-      const bookingPropertyId = String(booking.property_id ?? booking.propertyId ?? '');
+      const bookingPropertyId = String(
+        booking.property_id ?? booking.propertyId ?? booking.property?.id ?? ''
+      );
       const { data: mapping } = await supabase
         .from('pms_property_mappings')
         .select('id, stayloop_property_id')
@@ -964,43 +1112,103 @@ async function syncBookings(supabase: any, connection: any, token: string, prope
         continue;
       }
 
-      const { data: property } = await supabase
+      const { data: property, error: propertyError } = await supabase
         .from('properties')
         .select('host_id')
         .eq('id', mapping.stayloop_property_id)
         .single();
 
+      if (propertyError || !property) {
+        throw propertyError || new Error('Property not found for booking mapping');
+      }
+
+      const externalBookingId = String(booking.id);
+      const guestInfo = extractOwnerRezGuestInfo(booking);
+      const guestId = booking.guest_id ?? booking.guest?.id;
+
+      if ((!guestInfo.guest_email || !guestInfo.guest_phone) && guestId != null) {
+        const cacheKey = String(guestId);
+        if (!guestContactCache.has(cacheKey)) {
+          guestContactCache.set(cacheKey, await fetchOwnerRezGuestContact(connection, token, cacheKey));
+        }
+        const contact = guestContactCache.get(cacheKey)!;
+        if (!guestInfo.guest_email) guestInfo.guest_email = contact.guest_email;
+        if (!guestInfo.guest_phone) guestInfo.guest_phone = contact.guest_phone;
+      }
+
+      const { total, cleaningFee, guestServiceFee, hostServiceFee } = calculateOwnerRezBookingAmounts(booking);
+      const syncedAt = new Date().toISOString();
+      const bookingRow = {
+        property_id: mapping.stayloop_property_id,
+        guest_id: null,
+        host_id: property.host_id,
+        check_in: normalizeDateOnly(booking.arrival ?? booking.check_in),
+        check_out: normalizeDateOnly(booking.departure ?? booking.check_out),
+        num_guests:
+          Number(booking.adults ?? booking.guests ?? 1) +
+          Number(booking.children ?? 0) +
+          Number(booking.infants ?? 0),
+        total_nights: calculateOwnerRezBookingNights(booking),
+        base_amount: total,
+        cleaning_fee: cleaningFee,
+        guest_service_fee: guestServiceFee,
+        host_service_fee: hostServiceFee,
+        total_amount: total + guestServiceFee,
+        host_payout: total - hostServiceFee,
+        status: mapOwnerRezBookingStatus(booking),
+        external_pms_booking_id: externalBookingId,
+        external_pms_provider: 'ownerrez',
+        booking_source:
+          typeof booking.listing_site === 'string'
+            ? booking.listing_site.toLowerCase()
+            : 'ownerrez',
+        is_block: booking.is_block === true || booking.type === 'block',
+        guest_name: guestInfo.guest_name,
+        guest_email: guestInfo.guest_email,
+        guest_phone: guestInfo.guest_phone,
+        synced_at: syncedAt,
+        sync_direction: 'from_pms',
+      };
+
       const { data: existingBooking } = await supabase
         .from('bookings')
         .select('id')
         .eq('property_id', mapping.stayloop_property_id)
-        .eq('payment_intent_id', String(booking.id))
+        .eq('external_pms_booking_id', externalBookingId)
         .maybeSingle();
 
-      if (!existingBooking) {
-        const total = Number(booking.total || 0);
-        const cleaningFee = Number(booking.cleaning_fee ?? booking.cleaningFee ?? 0);
-        const guestServiceFee = Number((total * 0.05).toFixed(2));
-        const hostServiceFee = Number((total * 0.1).toFixed(2));
-
-        await supabase.from('bookings').insert({
-          property_id: mapping.stayloop_property_id,
-          guest_id: connection.user_id,
-          host_id: property.host_id,
-          check_in: booking.arrival,
-          check_out: booking.departure,
-          num_guests: booking.guests || 1,
-          total_nights: booking.nights || 1,
-          base_amount: total,
-          cleaning_fee: cleaningFee,
-          guest_service_fee: guestServiceFee,
-          host_service_fee: hostServiceFee,
-          total_amount: total + guestServiceFee,
-          host_payout: total - hostServiceFee,
-          status: booking.status === 'confirmed' ? 'confirmed' : 'pending',
-          payment_intent_id: String(booking.id),
-        });
+      let stayloopBookingId: string;
+      if (existingBooking) {
+        const { error: updateError } = await supabase
+          .from('bookings')
+          .update(bookingRow)
+          .eq('id', existingBooking.id);
+        if (updateError) throw updateError;
+        stayloopBookingId = existingBooking.id;
+      } else {
+        const { data: insertedBooking, error: insertError } = await supabase
+          .from('bookings')
+          .insert(bookingRow)
+          .select('id')
+          .single();
+        if (insertError || !insertedBooking) {
+          throw insertError || new Error('Failed to insert imported booking');
+        }
+        stayloopBookingId = insertedBooking.id;
       }
+
+      await supabase.from('pms_booking_mappings').upsert(
+        {
+          pms_connection_id: connection.id,
+          stayloop_booking_id: stayloopBookingId,
+          pms_booking_id: externalBookingId,
+          pms_quote_id: booking.quote_id != null ? String(booking.quote_id) : null,
+          last_synced_at: syncedAt,
+          sync_status: 'synced',
+          updated_at: syncedAt,
+        },
+        { onConflict: 'pms_connection_id,pms_booking_id' }
+      );
 
       succeeded++;
     } catch (error) {
