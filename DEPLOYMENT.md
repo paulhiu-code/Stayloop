@@ -54,3 +54,30 @@ Stripe Connect needs a Node/Express API host in addition to the Vercel frontend.
 - `PLATFORM_FEE_PERCENT` (optional; defaults to `10`)
 
 Never expose `STRIPE_SECRET_KEY` in Vercel frontend environment variables.
+
+## Email (Resend) setup
+
+StayLoop sends transactional email through Resend via the `send-email` Supabase Edge Function.
+
+1. Create a Resend account and verify your sending domain.
+2. In Supabase → Project Settings → Edge Functions → Secrets, add:
+   - `RESEND_API_KEY`
+   - `EMAIL_FROM` (example: `StayLoop <noreply@your-domain.com>`)
+   - `EMAIL_REPLY_TO` (optional; example: `support@your-domain.com`)
+3. Deploy the `send-email` function.
+4. Test the connection:
+
+```bash
+curl -s "https://YOUR_PROJECT_REF.supabase.co/functions/v1/send-email" \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "apikey: YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"test","to":"you@example.com"}'
+```
+
+For auth emails (signup verification and password reset), configure Supabase Auth SMTP with Resend:
+
+- Host: `smtp.resend.com`
+- Port: `465` (SSL) or `587` (STARTTLS)
+- Username: `resend`
+- Password: your `RESEND_API_KEY`
