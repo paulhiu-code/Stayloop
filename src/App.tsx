@@ -10,6 +10,7 @@ import PartnersPage from './components/PartnersPage';
 import HostOnboarding from './components/HostOnboarding';
 import HostDashboard from './components/HostDashboard';
 import CheckoutPage from './components/CheckoutPage';
+import ResetPasswordPage from './components/ResetPasswordPage';
 import PropertyDetailPage from './components/PropertyDetailPage';
 import { supabase, Property } from './lib/supabase';
 import { showcaseProperties } from './data/showcase';
@@ -67,7 +68,8 @@ function propertyIdFromPath(path: string): string | null {
   return match?.[1] || null;
 }
 
-function pageFromPath(path: string): SitePage {
+function pageFromPath(path: string): SitePage | 'reset-password' {
+  if (path === '/reset-password') return 'reset-password';
   if (path === '/hosts') return 'hosts';
   if (path === '/partners') return 'partners';
   if (path === '/host-onboarding') return 'host-onboarding';
@@ -93,7 +95,7 @@ function AppContent() {
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [showDashboard, setShowDashboard] = useState(false);
-  const [page, setPage] = useState<SitePage>(() => pageFromPath(window.location.pathname));
+  const [page, setPage] = useState<SitePage | 'reset-password'>(() => pageFromPath(window.location.pathname));
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -191,6 +193,10 @@ function AppContent() {
         </div>
       </div>
     );
+  }
+
+  if (page === 'reset-password') {
+    return <ResetPasswordPage onClose={() => navigate('home')} />;
   }
 
   if (page === 'hosts') {

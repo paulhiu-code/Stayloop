@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { useAuth, UserType } from '../contexts/AuthContext';
 
 export type AuthMode = 'signin' | 'signup';
+
+type AuthView = AuthMode | 'forgot';
 type JoinIntent = 'guest' | 'host';
 
 const joinIntentOptions: Array<{
@@ -67,24 +69,43 @@ export default function AuthModal({
   initialMode?: AuthMode;
 }) {
   const [isSignUp, setIsSignUp] = useState(initialMode === 'signup');
+  const [view, setView] = useState<AuthView>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [joinIntent, setJoinIntent] = useState<JoinIntent>('host');
   const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { signIn, signUp, signInWithOAuth } = useAuth();
+  const { signIn, signUp, signInWithOAuth, resetPassword } = useAuth();
+  const isForgotPassword = view === 'forgot';
+
+  useEffect(() => {
+    setView(initialMode);
+    setIsSignUp(initialMode === 'signup');
+  }, [initialMode]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
+      if (isForgotPassword) {
+        await resetPassword(email);
+        setSuccessMessage('Check your email for a password reset link.');
+        return;
+      }
+
       if (isSignUp) {
-        await signUp(email, password, fullName, userTypeFromIntent(joinIntent), referralCode);
+        const result = await signUp(email, password, fullName, userTypeFromIntent(joinIntent), referralCode);
+        if (result.needsEmailConfirmation) {
+          setSuccessMessage('Check your email to confirm your StayLoop account before signing in.');
+          return;
+        }
       } else {
         await signIn(email, password);
       }
@@ -100,7 +121,7 @@ export default function AuthModal({
     setError('');
     setLoading(true);
     try {
-      await signInWithOAuth(provider, isSignUp ? userTypeFromIntent(joinIntent) : undefined);
+      await signInWithOAuth(provider, view === 'signup' ? userTypeFromIntent(joinIntent) : undefined);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'OAuth sign-in failed');
       setLoading(false);
@@ -140,17 +161,27 @@ export default function AuthModal({
 
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            {isSignUp ? 'Join StayLoop' : 'Welcome Back'}
+            {isForgotPassword ? 'Reset your password' : isSignUp ? 'Join StayLoop' : 'Welcome Back'}
           </h2>
           <p className="text-gray-600">
-            {isSignUp
+            {isForgotPassword
+              ? 'We will email you a secure link to choose a new password'
+              : isSignUp
               ? 'Save stays, book trips, or list your property'
               : 'Sign in to access trips, hosting, and payouts'}
           </p>
         </div>
 
+        {successMessage ? (
+          <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-4 text-green-800">
+            <p className="font-semibold">{successMessage}</p>
+            {!isForgotPassword && (
+              <p className="mt-2 text-sm text-green-700">You can close this window after confirming your email.</p>
+            )}
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
-          {isSignUp && (
+          {isSignUp && !isForgotPassword && (
             <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -206,6 +237,8 @@ export default function AuthModal({
             </>
           )}
 
+          {!isForgotPassword && (
+            <>
           <div className="space-y-3">
             <button
               type="button"
@@ -223,6 +256,8 @@ export default function AuthModal({
             <span className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">or</span>
             <div className="h-px flex-1 bg-gray-200"></div>
           </div>
+            </>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
@@ -235,6 +270,7 @@ export default function AuthModal({
             />
           </div>
 
+          {!isForgotPassword && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
             <input
@@ -245,8 +281,9 @@ export default function AuthModal({
               required
             />
           </div>
+          )}
 
-          {isSignUp && (
+          {isSignUp && !isForgotPassword && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Referral Code (Optional)
@@ -275,19 +312,53 @@ export default function AuthModal({
             disabled={loading}
             className="w-full py-4 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
+            {loading
+              ? 'Please wait...'
+              : isForgotPassword
+              ? 'Send reset link'
+              : isSignUp
+              ? 'Create Account'
+              : 'Sign In'}
           </button>
         </form>
+        )}
+
+        {!successMessage && !isSignUp && !isForgotPassword && (
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setView('forgot');
+                setError('');
+                setSuccessMessage('');
+              }}
+              className="text-sm font-medium text-orange-600 transition hover:text-orange-700"
+            >
+              Forgot your password?
+            </button>
+          </div>
+        )}
 
         <div className="mt-6 text-center">
           <button
             onClick={() => {
-              setIsSignUp(!isSignUp);
+              if (isForgotPassword) {
+                setView('signin');
+                setIsSignUp(false);
+              } else {
+                setIsSignUp(!isSignUp);
+                setView(isSignUp ? 'signin' : 'signup');
+              }
               setError('');
+              setSuccessMessage('');
             }}
             className="text-orange-600 hover:text-orange-700 font-medium transition"
           >
-            {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+            {isForgotPassword
+              ? 'Back to sign in'
+              : isSignUp
+              ? 'Already have an account? Sign in'
+              : "Don't have an account? Sign up"}
           </button>
         </div>
       </div>

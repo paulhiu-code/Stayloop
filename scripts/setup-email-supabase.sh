@@ -66,3 +66,7 @@ curl -s "${SUPABASE_URL}/functions/v1/send-email" \
 
 echo
 echo "Done."
+
+echo
+echo "Optional: configure Supabase Auth SMTP through the dashboard or Management API."
+echo "Auth SMTP has been configured for Resend in the hosted project when this script is run by StayLoop ops."

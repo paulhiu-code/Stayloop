@@ -5,16 +5,26 @@ import { supabase, Profile } from '../lib/supabase';
 export type UserType = Profile['user_type'];
 export type OAuthProvider = 'google' | 'apple';
 
+type SignUpResult = {
+  needsEmailConfirmation: boolean;
+};
+
 type AuthContextType = {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string, userType: UserType, referralCode?: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, userType: UserType, referralCode?: string) => Promise<SignUpResult>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithOAuth: (provider: OAuthProvider, userType?: UserType) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserType: (userType: UserType) => Promise<void>;
 };
+
+function authRedirectUrl(path: string): string {
+  return `${window.location.origin}${path}`;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -85,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function signUp(email: string, password: string, fullName: string, userType: UserType, referralCode?: string) {
+  async function signUp(email: string, password: string, fullName: string, userType: UserType, referralCode?: string): Promise<SignUpResult> {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -103,7 +113,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // If email confirmation is enabled, Supabase returns a user without a session.
     // In that case, the database trigger stores metadata on profile creation.
-    if (!authData.session) return;
+    if (!authData.session) {
+      return { needsEmailConfirmation: true };
+    }
 
     let referrerId = null;
     if (referralCode) {
@@ -129,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (profileError) throw profileError;
     await fetchProfile(authData.user.id);
+    return { needsEmailConfirmation: false };
   }
 
   async function signIn(email: string, password: string) {
@@ -136,6 +149,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       password,
     });
+    if (error) throw error;
+  }
+
+  async function resetPassword(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: authRedirectUrl('/reset-password'),
+    });
+    if (error) throw error;
+  }
+
+  async function updatePassword(password: string) {
+    const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
   }
 
@@ -172,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signInWithOAuth, signOut, updateUserType }}>
+    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signInWithOAuth, resetPassword, updatePassword, signOut, updateUserType }}>
       {children}
     </AuthContext.Provider>
   );
