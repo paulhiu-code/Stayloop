@@ -620,17 +620,59 @@ function mapOwnerRezProperty(prop: Record<string, unknown>, connection: Record<s
     bedrooms: typeof prop.bedrooms === 'number' ? prop.bedrooms : 1,
     bathrooms: typeof prop.bathrooms === 'number' ? prop.bathrooms : 1,
     max_guests: typeof prop.max_guests === 'number' ? prop.max_guests : 2,
+    max_adults: typeof prop.max_adults === 'number' ? prop.max_adults : null,
+    max_children: typeof prop.max_children === 'number' ? prop.max_children : null,
+    max_pets: typeof prop.max_pets === 'number' ? prop.max_pets : null,
+    check_in_time: typeof prop.check_in === 'string' ? prop.check_in : null,
+    check_out_time: typeof prop.check_out === 'string' ? prop.check_out : null,
+    currency_code: typeof prop.currency_code === 'string' ? prop.currency_code : 'USD',
+    timezone: typeof prop.time_zone === 'string' ? prop.time_zone : null,
     base_price: 0,
     cleaning_fee: 0,
     amenities: [],
     images,
     is_active: prop.active !== false,
+    external_pms_property_id: String(prop.id),
+    external_pms_provider: 'ownerrez',
+    synced_at: new Date().toISOString(),
     pms_integration: {
       provider: 'ownerrez',
       property_id: String(prop.id),
       last_synced: new Date().toISOString(),
     },
   };
+}
+
+function mapOwnerRezBookingStatus(booking: Record<string, unknown>): string {
+  const status = String(booking.status ?? '').toLowerCase();
+  if (status === 'canceled' || status === 'cancelled') return 'cancelled';
+  if (status === 'confirmed' || status === 'active') return 'confirmed';
+  return 'pending';
+}
+
+function extractOwnerRezGuestInfo(booking: Record<string, unknown>) {
+  const guest = booking.guest as Record<string, unknown> | undefined;
+  if (!guest) {
+    return { guest_name: null, guest_email: null, guest_phone: null };
+  }
+
+  const firstName = typeof guest.first_name === 'string' ? guest.first_name : '';
+  const lastName = typeof guest.last_name === 'string' ? guest.last_name : '';
+  const fullName =
+    [firstName, lastName].filter(Boolean).join(' ') ||
+    (typeof guest.name === 'string' ? guest.name : null);
+
+  return {
+    guest_name: fullName,
+    guest_email: typeof guest.email === 'string' ? guest.email : null,
+    guest_phone:
+      (typeof guest.phone === 'string' && guest.phone) ||
+      (typeof guest.phone_number === 'string' ? guest.phone_number : null),
+  };
+}
+
+function ownerRezBookingQuerySuffix(): string {
+  return '?include_guest=true&include_charges=true';
 }
 
 Deno.serve(async (req: Request) => {
