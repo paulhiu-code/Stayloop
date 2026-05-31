@@ -26,7 +26,7 @@ if [[ -z "${RESEND_API_KEY:-}" ]]; then
   exit 1
 fi
 
-EMAIL_FROM="${EMAIL_FROM:-StayLoop <onboarding@resend.dev>}"
+EMAIL_FROM="${EMAIL_FROM:-StayLoop <noreply@stay-loop.co>}"
 EMAIL_REPLY_TO="${EMAIL_REPLY_TO:-alpha.media.solutions@outlook.com}"
 SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY:-}"
 

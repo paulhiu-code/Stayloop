@@ -62,8 +62,8 @@ StayLoop sends transactional email through Resend via the `send-email` Supabase 
 1. Create a Resend account and verify your sending domain.
 2. In Supabase → Project Settings → Edge Functions → Secrets, add:
    - `RESEND_API_KEY`
-   - `EMAIL_FROM` (example: `StayLoop <noreply@your-domain.com>`)
-   - `EMAIL_REPLY_TO` (optional; example: `support@your-domain.com`)
+   - `EMAIL_FROM` (example: `StayLoop <noreply@stay-loop.co>`)
+   - `EMAIL_REPLY_TO` (optional; example: `support@stay-loop.co` once inbound MX is verified)
 3. Deploy the `send-email` function.
 4. Test the connection:
 
