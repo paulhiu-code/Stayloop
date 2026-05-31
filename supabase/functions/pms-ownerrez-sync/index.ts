@@ -444,7 +444,7 @@ async function tryFetchOwnerRezListing(
     const response = await ownerRezFetch(
       connection,
       token,
-      `/listings?property_ids=${encodeURIComponent(propertyId)}&includeImages=true&includeDescriptions=true&includeAmenities=true`
+      `/listings/${encodeURIComponent(propertyId)}?includeImages=true&includeDescriptions=true&includeAmenities=true&includeRooms=true`
     );
     if (response.status === 402) {
       console.warn(`OwnerRez listings API unavailable for property ${propertyId} (premium feature disabled)`);
@@ -453,13 +453,7 @@ async function tryFetchOwnerRezListing(
     if (!response.ok) {
       return null;
     }
-    const page = (await response.json()) as Record<string, unknown>;
-    const items = (page.items as Record<string, unknown>[]) || [];
-    return (
-      items.find((item) => String(item.property_id ?? item.id ?? '') === String(propertyId)) ||
-      items[0] ||
-      null
-    );
+    return (await response.json()) as Record<string, unknown>;
   } catch (error) {
     console.warn(`OwnerRez listings fetch failed for property ${propertyId}:`, error);
     return null;
@@ -596,6 +590,97 @@ async function syncOwnerRezPricingAndCalendar(
   };
 }
 
+function stripHtml(value: string): string {
+  return value
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function extractOwnerRezListingDescription(listing: Record<string, unknown> | null | undefined): string | null {
+  if (!listing) return null;
+  const descriptions = listing.descriptions;
+  if (!descriptions || typeof descriptions !== 'object' || Array.isArray(descriptions)) {
+    return null;
+  }
+
+  const row = descriptions as Record<string, unknown>;
+  const parts: string[] = [];
+  if (typeof row.headline === 'string' && row.headline.trim()) {
+    parts.push(row.headline.trim());
+  }
+  if (typeof row.short_description === 'string' && row.short_description.trim()) {
+    parts.push(stripHtml(row.short_description.trim()));
+  }
+  if (typeof row.description === 'string' && row.description.trim()) {
+    parts.push(stripHtml(row.description.trim()));
+  }
+
+  return parts.length > 0 ? parts.join('\n\n') : null;
+}
+
+function extractOwnerRezListingImages(listing: Record<string, unknown> | null | undefined): string[] {
+  const images: string[] = [];
+  const sources = [listing?.photos, listing?.images];
+  for (const source of sources) {
+    if (!Array.isArray(source)) continue;
+    for (const image of source) {
+      if (typeof image === 'string' && image.length > 0) {
+        images.push(image);
+        continue;
+      }
+      if (!image || typeof image !== 'object') continue;
+      const row = image as Record<string, unknown>;
+      for (const key of ['large_url', 'original_url', 'url', 'cropped_url', 'thumbnail_url']) {
+        const value = row[key];
+        if (typeof value === 'string' && value.length > 0) {
+          images.push(value);
+          break;
+        }
+      }
+    }
+  }
+  return [...new Set(images)];
+}
+
+function extractOwnerRezListingAmenities(listing: Record<string, unknown> | null | undefined): string[] {
+  const amenities = new Set<string>();
+  const flat = listing?.amenities;
+  if (Array.isArray(flat)) {
+    for (const amenity of flat) {
+      if (typeof amenity === 'string' && amenity.trim()) amenities.add(amenity.trim());
+      else if (amenity && typeof amenity === 'object') {
+        const name = (amenity as Record<string, unknown>).name;
+        if (typeof name === 'string' && name.trim()) amenities.add(name.trim());
+      }
+    }
+  }
+
+  const categories = listing?.amenity_categories;
+  if (Array.isArray(categories)) {
+    for (const category of categories) {
+      if (!category || typeof category !== 'object') continue;
+      const rows = (category as Record<string, unknown>).amenities;
+      if (!Array.isArray(rows)) continue;
+      for (const amenity of rows) {
+        if (typeof amenity === 'string' && amenity.trim()) amenities.add(amenity.trim());
+        else if (amenity && typeof amenity === 'object') {
+          const name = (amenity as Record<string, unknown>).name;
+          if (typeof name === 'string' && name.trim()) amenities.add(name.trim());
+        }
+      }
+    }
+  }
+
+  return [...amenities];
+}
+
 function mapOwnerRezProperty(
   prop: Record<string, unknown>,
   connection: Record<string, unknown>,
@@ -616,26 +701,7 @@ function mapOwnerRezProperty(
     [street1, street2].filter(Boolean).join(', ') ||
     (typeof addr.address === 'string' ? addr.address : 'Address on file');
 
-  const images: string[] = [];
-  const listingImages = enrichment?.listing?.images;
-  if (Array.isArray(listingImages)) {
-    for (const image of listingImages) {
-      if (typeof image === 'string' && image.length > 0) {
-        images.push(image);
-        continue;
-      }
-      if (image && typeof image === 'object') {
-        const row = image as Record<string, unknown>;
-        for (const key of ['large_url', 'original_url', 'url', 'thumbnail_url']) {
-          const value = row[key];
-          if (typeof value === 'string' && value.length > 0) {
-            images.push(value);
-            break;
-          }
-        }
-      }
-    }
-  }
+  const images = extractOwnerRezListingImages(enrichment?.listing ?? null);
   if (images.length === 0) {
     for (const key of ['thumbnail_url_large', 'thumbnail_url', 'thumbnail_url_medium']) {
       const value = merged[key];
@@ -645,43 +711,19 @@ function mapOwnerRezProperty(
     }
   }
 
-  const amenities: string[] = [];
-  const listingAmenities = enrichment?.listing?.amenities;
-  if (Array.isArray(listingAmenities)) {
-    for (const amenity of listingAmenities) {
-      if (typeof amenity === 'string' && amenity.trim()) {
-        amenities.push(amenity.trim());
-      } else if (amenity && typeof amenity === 'object') {
-        const name = (amenity as Record<string, unknown>).name;
-        if (typeof name === 'string' && name.trim()) {
-          amenities.push(name.trim());
-        }
-      }
-    }
-  }
+  const amenities = extractOwnerRezListingAmenities(enrichment?.listing ?? null);
 
   let description =
-    typeof merged.public_url === 'string'
+    extractOwnerRezListingDescription(enrichment?.listing ?? null) ||
+    (typeof merged.public_url === 'string'
       ? `Imported from OwnerRez. View listing: ${merged.public_url}`
-      : 'Imported from OwnerRez.';
-  const listingDescriptions = enrichment?.listing?.descriptions;
-  if (Array.isArray(listingDescriptions) && listingDescriptions.length > 0) {
-    const parts: string[] = [];
-    for (const entry of listingDescriptions) {
-      if (typeof entry === 'string' && entry.trim()) {
-        parts.push(entry.trim());
-      } else if (entry && typeof entry === 'object') {
-        const row = entry as Record<string, unknown>;
-        const textValue = row.text ?? row.description ?? row.body;
-        if (typeof textValue === 'string' && textValue.trim()) {
-          parts.push(textValue.trim());
-        }
-      }
-    }
-    if (parts.length > 0) {
-      description = parts.join('\n\n');
-    }
-  }
+      : 'Imported from OwnerRez.');
+
+  const houseRules =
+    typeof enrichment?.listing?.check_in_instructions === 'string' &&
+    enrichment.listing.check_in_instructions.trim()
+      ? stripHtml(enrichment.listing.check_in_instructions.trim())
+      : null;
 
   let propertyType = typeof merged.property_type === 'string' ? merged.property_type.toLowerCase() : 'house';
   const allowedTypes = new Set([
@@ -727,6 +769,7 @@ function mapOwnerRezProperty(
     currency_code: typeof merged.currency_code === 'string' ? merged.currency_code : 'USD',
     timezone: typeof merged.time_zone === 'string' ? merged.time_zone : null,
     cancellation_policy: listingCancellation,
+    house_rules: houseRules,
     base_price: 0,
     cleaning_fee: 0,
     amenities,
