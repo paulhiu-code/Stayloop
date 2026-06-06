@@ -36,7 +36,22 @@ export async function wasEmailSent(pool, { triggerSlug, dedupeKey }) {
   return rows.length > 0;
 }
 
-export async function sendTriggerEmail({ trigger, to, variables }) {
+export async function isHostTriggerDisabled(pool, { triggerSlug, hostId }) {
+  if (!hostId) return false;
+
+  const { rows } = await pool.query(
+    `SELECT is_active
+     FROM email_triggers
+     WHERE host_id = $1
+       AND platform_trigger_slug = $2
+     LIMIT 1`,
+    [hostId, triggerSlug]
+  );
+
+  return rows[0] ? !rows[0].is_active : false;
+}
+
+export async function sendTriggerEmail({ trigger, to, variables, hostId }) {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -54,6 +69,7 @@ export async function sendTriggerEmail({ trigger, to, variables }) {
     body: JSON.stringify({
       action: 'send',
       trigger,
+      hostId: hostId || undefined,
       to,
       variables: {
         ...variables,
@@ -77,8 +93,11 @@ export async function sendTriggerEmail({ trigger, to, variables }) {
   return payload;
 }
 
-export async function dispatchTrigger(pool, { triggerSlug, to, variables, dedupeKey }) {
+export async function dispatchTrigger(pool, { triggerSlug, to, variables, dedupeKey, hostId }) {
   if (!to) return { skipped: true, reason: 'missing_recipient' };
+
+  const hostDisabled = await isHostTriggerDisabled(pool, { triggerSlug, hostId });
+  if (hostDisabled) return { skipped: true, reason: 'host_disabled' };
 
   const alreadySent = await wasEmailSent(pool, { triggerSlug, dedupeKey });
   if (alreadySent) return { skipped: true, reason: 'already_sent' };
@@ -86,6 +105,7 @@ export async function dispatchTrigger(pool, { triggerSlug, to, variables, dedupe
   const result = await sendTriggerEmail({
     trigger: triggerSlug,
     to,
+    hostId,
     variables: {
       ...variables,
       dedupe_key: dedupeKey,

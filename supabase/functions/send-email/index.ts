@@ -16,6 +16,7 @@ const corsHeaders = {
 type SendEmailRequest = {
   action?: 'health' | 'test' | 'preview' | 'send';
   trigger?: string;
+  hostId?: string;
   to?: string;
   subject?: string;
   html?: string;
@@ -58,8 +59,17 @@ function isServiceRoleRequest(req: Request): boolean {
   return token === serviceRoleKey || apiKeyHeader === serviceRoleKey;
 }
 
-async function isAdminRequest(req: Request): Promise<boolean> {
-  if (isServiceRoleRequest(req)) return true;
+type AuthContext = {
+  authorized: boolean;
+  userId: string | null;
+  isAdmin: boolean;
+  isHost: boolean;
+};
+
+async function getAuthContext(req: Request): Promise<AuthContext> {
+  if (isServiceRoleRequest(req)) {
+    return { authorized: true, userId: null, isAdmin: true, isHost: false };
+  }
 
   const url = getSupabaseUrl();
   const anonKey =
@@ -68,29 +78,102 @@ async function isAdminRequest(req: Request): Promise<boolean> {
   const authHeader = req.headers.get('Authorization') ?? '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-  if (!url || !anonKey || !token || token === anonKey) return false;
+  if (!url || !anonKey || !token || token === anonKey) {
+    return { authorized: false, userId: null, isAdmin: false, isHost: false };
+  }
 
   const service = createServiceClient();
   const { data: userData, error: userError } = await service.auth.getUser(token);
-  if (userError || !userData.user) return false;
+  if (userError || !userData.user) {
+    return { authorized: false, userId: null, isAdmin: false, isHost: false };
+  }
 
   const { data: profile } = await service
     .from('profiles')
-    .select('is_admin')
+    .select('is_admin, user_type')
     .eq('id', userData.user.id)
     .maybeSingle();
 
-  return Boolean(profile?.is_admin);
+  const isAdmin = Boolean(profile?.is_admin);
+  const isHost = profile?.user_type === 'host' || profile?.user_type === 'both';
+
+  return {
+    authorized: isAdmin || isHost,
+    userId: userData.user.id,
+    isAdmin,
+    isHost,
+  };
 }
 
-async function loadTriggerTemplate(supabase: ReturnType<typeof createServiceClient>, triggerSlug: string) {
-  const { data: trigger, error: triggerError } = await supabase
-    .from('email_triggers')
-    .select('id, slug, name, is_active, variables_schema')
-    .eq('slug', triggerSlug)
-    .maybeSingle();
+function canManageHostEmails(auth: AuthContext, hostId?: string): boolean {
+  if (!auth.authorized) return false;
+  if (auth.isAdmin || !hostId) return auth.isAdmin;
+  return auth.isHost && auth.userId === hostId;
+}
 
-  if (triggerError) throw triggerError;
+async function loadTriggerTemplate(
+  supabase: ReturnType<typeof createServiceClient>,
+  triggerSlug: string,
+  hostId?: string
+) {
+  let trigger:
+    | {
+        id: string;
+        slug: string;
+        name: string;
+        is_active: boolean;
+        variables_schema: unknown;
+        host_id?: string | null;
+        platform_trigger_slug?: string | null;
+      }
+    | null = null;
+
+  if (hostId) {
+    const { data: hostOverride, error: hostError } = await supabase
+      .from('email_triggers')
+      .select('id, slug, name, is_active, variables_schema, host_id, platform_trigger_slug')
+      .eq('host_id', hostId)
+      .eq('platform_trigger_slug', triggerSlug)
+      .maybeSingle();
+
+    if (hostError) throw hostError;
+    if (hostOverride) {
+      if (!hostOverride.is_active) {
+        throw new Error(`Host email trigger is disabled: ${triggerSlug}`);
+      }
+      trigger = hostOverride;
+    }
+
+    if (!trigger) {
+      const { data: hostCustom, error: customError } = await supabase
+        .from('email_triggers')
+        .select('id, slug, name, is_active, variables_schema, host_id, platform_trigger_slug')
+        .eq('host_id', hostId)
+        .eq('slug', triggerSlug)
+        .maybeSingle();
+
+      if (customError) throw customError;
+      if (hostCustom) {
+        if (!hostCustom.is_active) {
+          throw new Error(`Host email trigger is disabled: ${triggerSlug}`);
+        }
+        trigger = hostCustom;
+      }
+    }
+  }
+
+  if (!trigger) {
+    const { data: platformTrigger, error: triggerError } = await supabase
+      .from('email_triggers')
+      .select('id, slug, name, is_active, variables_schema, host_id')
+      .eq('slug', triggerSlug)
+      .is('host_id', null)
+      .maybeSingle();
+
+    if (triggerError) throw triggerError;
+    trigger = platformTrigger;
+  }
+
   if (!trigger) throw new Error(`Unknown email trigger: ${triggerSlug}`);
   if (!trigger.is_active) throw new Error(`Email trigger is disabled: ${triggerSlug}`);
 
@@ -116,6 +199,7 @@ async function logDelivery(
     recipient: string;
     subject: string;
     status: 'sent' | 'failed' | 'preview';
+    host_id?: string | null;
     provider_message_id?: string | null;
     error_message?: string | null;
     metadata?: Record<string, unknown>;
@@ -128,6 +212,7 @@ async function logDelivery(
     recipient: entry.recipient,
     subject: entry.subject,
     status: entry.status,
+    host_id: entry.host_id ?? null,
     provider_message_id: entry.provider_message_id ?? null,
     error_message: entry.error_message ?? null,
     metadata: entry.metadata ?? {},
@@ -161,7 +246,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const action = body.action ?? 'test';
-  const authorized = await isAdminRequest(req);
+  const auth = await getAuthContext(req);
+  const hostId = body.hostId?.trim() || undefined;
 
   if (action === 'health') {
     return jsonResponse({
@@ -173,7 +259,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  if ((action === 'preview' || action === 'send') && !authorized) {
+  if ((action === 'preview' || action === 'send') && !canManageHostEmails(auth, hostId)) {
     return jsonResponse({ error: 'Unauthorized.' }, 401);
   }
 
@@ -188,7 +274,7 @@ Deno.serve(async (req: Request) => {
     if (!triggerSlug) return jsonResponse({ error: 'Missing trigger slug.' }, 400);
 
     try {
-      const { trigger, template } = await loadTriggerTemplate(supabase, triggerSlug);
+      const { trigger, template } = await loadTriggerTemplate(supabase, triggerSlug, hostId);
       const variables = {
         ...buildSampleVariables(trigger.variables_schema as Array<{ key: string; sample?: string }>),
         ...(body.variables ?? {}),
@@ -200,6 +286,7 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({
         ok: true,
         trigger: trigger.slug,
+        hostId: trigger.host_id ?? null,
         subject,
         html,
         text,
@@ -221,7 +308,7 @@ Deno.serve(async (req: Request) => {
     if (!to) return jsonResponse({ error: 'Missing recipient email.' }, 400);
 
     try {
-      const { trigger, template } = await loadTriggerTemplate(supabase, triggerSlug);
+      const { trigger, template } = await loadTriggerTemplate(supabase, triggerSlug, hostId);
       const variables = {
         ...buildSampleVariables(trigger.variables_schema as Array<{ key: string; sample?: string }>),
         ...(body.variables ?? {}),
@@ -235,22 +322,27 @@ Deno.serve(async (req: Request) => {
         subject,
         html,
         text,
-        tags: [{ name: 'trigger', value: triggerSlug }],
+        tags: [
+          { name: 'trigger', value: triggerSlug },
+          ...(hostId ? [{ name: 'host_id', value: hostId }] : []),
+        ],
       });
 
       await logDelivery(supabase, {
         trigger_id: trigger.id,
-        trigger_slug: trigger.slug,
+        trigger_slug: trigger.platform_trigger_slug ?? trigger.slug,
         template_id: template.id,
         recipient: to,
         subject,
         status: 'sent',
+        host_id: trigger.host_id ?? hostId ?? null,
         provider_message_id: result.id,
         metadata: {
           variables,
           version: template.version,
           dedupe_key: typeof variables.dedupe_key === 'string' ? variables.dedupe_key : null,
           booking_id: typeof variables.booking_id === 'string' ? variables.booking_id : null,
+          host_id: trigger.host_id ?? hostId ?? null,
         },
       });
 
@@ -258,6 +350,7 @@ Deno.serve(async (req: Request) => {
         ok: true,
         messageId: result.id,
         trigger: trigger.slug,
+        hostId: trigger.host_id ?? hostId ?? null,
         to,
         subject,
         from: getEmailFromAddress(),
@@ -268,7 +361,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  if (!isServiceRoleRequest(req) && !authorized) {
+  if (!isServiceRoleRequest(req) && !auth.authorized) {
     return jsonResponse({ error: 'Unauthorized.' }, 401);
   }
 

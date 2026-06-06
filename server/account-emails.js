@@ -29,12 +29,14 @@ export async function sendNewMessageEmail(pool, {
   senderName,
   propertyTitle,
   messagePreview,
+  hostUserId,
 }) {
   const triggerSlug = recipientRole === 'host' ? 'message.new.host' : 'message.new.guest';
 
   return dispatchTrigger(pool, {
     triggerSlug,
     to: recipientEmail,
+    hostId: hostUserId,
     dedupeKey: `message:${messageId}:${triggerSlug}`,
     variables: {
       guest_name: recipientRole === 'guest' ? recipientName : senderName,
@@ -50,12 +52,14 @@ export async function sendNewMessageEmail(pool, {
 export async function sendPmsSyncFailedEmail(pool, {
   hostEmail,
   hostName,
+  hostUserId,
   pmsProvider,
   syncError,
 }) {
   return dispatchTrigger(pool, {
     triggerSlug: 'pms.sync.failed',
     to: hostEmail,
+    hostId: hostUserId,
     dedupeKey: `pms-sync:${hostEmail}:${new Date().toISOString().slice(0, 13)}`,
     variables: {
       host_name: hostName || 'Host',

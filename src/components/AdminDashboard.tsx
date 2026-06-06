@@ -6,5 +6,5 @@ export default function AdminDashboard({
   onClose: () => void;
   adminEmail?: string | null;
 }) {
-  return <EmailCmsDashboard onClose={onClose} />;
+  return <EmailCmsDashboard mode="admin" onClose={onClose} />;
 }

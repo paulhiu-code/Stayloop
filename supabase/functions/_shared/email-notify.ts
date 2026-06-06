@@ -56,6 +56,7 @@ export async function notifyPmsSyncFailure(
     body: JSON.stringify({
       action: 'send',
       trigger: 'pms.sync.failed',
+      hostId: hostUserId,
       to: profile.email,
       variables: {
         host_name: profile.full_name || 'Host',
