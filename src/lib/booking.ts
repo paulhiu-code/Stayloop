@@ -208,7 +208,7 @@ export async function fetchHostStripeAccountId(hostId: string): Promise<string |
 
   if (error) throw error;
   if (!data?.stripe_account_id || !data.stripe_charges_enabled) {
-    return data?.stripe_account_id || null;
+    return null;
   }
 
   return data.stripe_account_id;
