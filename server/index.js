@@ -1,7 +1,12 @@
 import express from 'express';
+import Stripe from 'stripe';
 import stripeRouter from '../routes/stripe.js';
 import { authenticateUser } from './auth.js';
 import { handleStripeWebhook } from './webhook.js';
+
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
+  : null;
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -25,7 +30,38 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), handl
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'stayloop-api' });
+  res.json({
+    status: 'ok',
+    service: 'stayloop-api',
+    stripeConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
+    databaseConfigured: Boolean(process.env.DATABASE_URL),
+    supabaseAuthConfigured: Boolean(
+      (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) &&
+        (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)
+    ),
+  });
+});
+
+// Verifies the platform Stripe secret key can reach the StayLoop master account.
+app.get('/health/stripe', async (_req, res) => {
+  if (!stripe) {
+    return res.status(503).json({ ok: false, error: 'STRIPE_SECRET_KEY is not configured' });
+  }
+
+  try {
+    const balance = await stripe.balance.retrieve();
+    return res.json({
+      ok: true,
+      mode: process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ? 'live' : 'test',
+      available: balance.available,
+      pending: balance.pending,
+    });
+  } catch (err) {
+    return res.status(502).json({
+      ok: false,
+      error: err instanceof Error ? err.message : 'Stripe connection failed',
+    });
+  }
 });
 
 // Everything below requires a verified Supabase session.
