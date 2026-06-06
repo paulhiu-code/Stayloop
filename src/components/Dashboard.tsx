@@ -17,7 +17,7 @@ import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
 import EmailCmsDashboard from './admin/EmailCmsDashboard';
 import PMSSettings from './PMSSettings';
 
-type DashboardTab = 'overview' | 'properties' | 'bookings' | 'referrals' | 'pms';
+type DashboardTab = 'overview' | 'properties' | 'bookings' | 'referrals' | 'pms' | 'emails';
 type DashboardMode = 'guest' | 'host';
 type AdminView = 'main' | 'email-cms';
 
@@ -92,6 +92,7 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
     { id: 'properties', label: 'Properties', icon: Home },
     { id: 'bookings', label: 'Bookings', icon: Calendar },
     { id: 'referrals', label: 'Referrals', icon: Network },
+    { id: 'emails', label: 'Guest emails', icon: Mail },
     { id: 'pms', label: 'PMS Integrations', icon: Settings },
   ];
 
@@ -179,7 +180,7 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
 
           {adminView === 'email-cms' && isAdmin ? (
             <div className="-mx-4 overflow-hidden rounded-3xl border border-slate-800 sm:mx-0">
-              <EmailCmsDashboard embedded onClose={() => setAdminView('main')} />
+              <EmailCmsDashboard mode="admin" embedded onClose={() => setAdminView('main')} />
             </div>
           ) : dashboardMode === 'guest' ? (
             <div className="space-y-8">
@@ -495,6 +496,16 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === 'emails' && (
+                <div className="-mx-6 overflow-hidden rounded-2xl border border-slate-800">
+                  <EmailCmsDashboard
+                    mode="host"
+                    embedded
+                    onClose={() => setActiveTab('overview')}
+                  />
                 </div>
               )}
 

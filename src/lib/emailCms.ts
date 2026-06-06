@@ -15,6 +15,11 @@ export type EmailTrigger = {
   is_active: boolean;
   sort_order: number;
   updated_at: string;
+  host_id?: string | null;
+  platform_trigger_slug?: string | null;
+  is_host_custom?: boolean;
+  host_editable?: boolean;
+  send_timing?: Record<string, string> | null;
 };
 
 export type EmailTemplate = {
@@ -71,7 +76,106 @@ export const EMAIL_CATEGORIES = [
   'messaging',
   'pms',
   'review',
+  'custom',
 ] as const;
+
+export const HOST_EMAIL_CATEGORIES = [
+  'all',
+  'booking',
+  'messaging',
+  'review',
+  'pms',
+  'payment',
+  'custom',
+] as const;
+
+export type EmailCmsMode = 'admin' | 'host';
+
+export const HOST_EDITABLE_PLATFORM_SLUGS = [
+  'booking.confirmed.guest',
+  'booking.confirmed.host',
+  'booking.reminder.checkin.guest',
+  'review.request.guest',
+  'message.new.guest',
+  'message.new.host',
+  'booking.cancelled.guest',
+  'booking.cancelled.host',
+  'payout.sent.host',
+  'pms.sync.failed',
+] as const;
+
+export type HostLifecycleOverride = {
+  id: string;
+  host_id: string;
+  platform_step_slug: string;
+  delay_interval: string;
+  delay_anchor: 'trigger' | 'check_in' | 'check_out';
+  is_active: boolean;
+};
+
+export type HostEmailListItem = EmailTriggerWithTemplate & {
+  source: 'platform-default' | 'host-override' | 'host-custom';
+  platformSlug?: string;
+  isEditable: boolean;
+};
+
+export function slugifyEmailName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+}
+
+export function buildHostCustomSlug(hostId: string, name: string) {
+  return `host.${hostId.replace(/-/g, '').slice(0, 8)}.${slugifyEmailName(name)}`;
+}
+
+export function mergeHostEmailCatalog(
+  platformTriggers: EmailTriggerWithTemplate[],
+  hostTriggers: EmailTriggerWithTemplate[]
+): HostEmailListItem[] {
+  const hostByPlatform = new Map(
+    hostTriggers
+      .filter((trigger) => trigger.platform_trigger_slug)
+      .map((trigger) => [trigger.platform_trigger_slug as string, trigger])
+  );
+  const customTriggers = hostTriggers.filter((trigger) => trigger.is_host_custom);
+  const items: HostEmailListItem[] = [];
+
+  for (const slug of HOST_EDITABLE_PLATFORM_SLUGS) {
+    const platform = platformTriggers.find((trigger) => trigger.slug === slug && !trigger.host_id);
+    const override = hostByPlatform.get(slug);
+    if (override) {
+      items.push({
+        ...override,
+        source: 'host-override',
+        platformSlug: slug,
+        isEditable: true,
+      });
+      continue;
+    }
+
+    if (platform) {
+      items.push({
+        ...platform,
+        source: 'platform-default',
+        platformSlug: slug,
+        isEditable: false,
+      });
+    }
+  }
+
+  for (const custom of customTriggers) {
+    items.push({
+      ...custom,
+      source: 'host-custom',
+      isEditable: true,
+    });
+  }
+
+  return items.sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+}
 
 export function renderTemplateString(
   template: string,

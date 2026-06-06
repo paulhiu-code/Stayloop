@@ -148,13 +148,14 @@ export async function confirmBookingAndSendEmails(pool, { bookingId, paymentInte
   const sends = [];
 
   for (const trigger of [
-    { slug: 'booking.confirmed.guest', to: booking.guest_email },
-    { slug: 'booking.confirmed.host', to: booking.host_email },
+    { slug: 'booking.confirmed.guest', to: booking.guest_email, hostId: booking.host_user_id },
+    { slug: 'booking.confirmed.host', to: booking.host_email, hostId: booking.host_user_id },
     { slug: 'booking.payment.receipt', to: booking.guest_email },
   ]) {
     const result = await dispatchTrigger(pool, {
       triggerSlug: trigger.slug,
       to: trigger.to,
+      hostId: trigger.hostId,
       dedupeKey: bookingDedupeKey(bookingId, trigger.slug),
       variables,
     });
@@ -163,6 +164,31 @@ export async function confirmBookingAndSendEmails(pool, { bookingId, paymentInte
 
   const referralSends = await sendReferralCommissionEmails(pool, bookingId, variables);
   sends.push(...referralSends);
+
+  const { rows: confirmationCustomEmails } = await pool.query(
+    `SELECT slug, recipient_role
+     FROM email_triggers
+     WHERE host_id = $1
+       AND is_host_custom = true
+       AND is_active = true
+       AND COALESCE(send_timing->>'mode', '') <> 'manual'
+       AND COALESCE(send_timing->>'anchor', 'trigger') = 'trigger'
+       AND COALESCE(send_timing->>'delay_interval', '0 seconds') = '0 seconds'`,
+    [booking.host_user_id]
+  );
+
+  for (const customEmail of confirmationCustomEmails) {
+    const recipient =
+      customEmail.recipient_role === 'host' ? booking.host_email : booking.guest_email;
+    const result = await dispatchTrigger(pool, {
+      triggerSlug: customEmail.slug,
+      to: recipient,
+      hostId: booking.host_user_id,
+      dedupeKey: bookingDedupeKey(bookingId, customEmail.slug, 'confirm'),
+      variables,
+    });
+    sends.push({ trigger: customEmail.slug, to: recipient, ...result });
+  }
 
   return {
     bookingId,
@@ -181,12 +207,13 @@ export async function sendBookingCancelledEmails(pool, bookingId) {
 
   const sends = [];
   for (const trigger of [
-    { slug: 'booking.cancelled.guest', to: booking.guest_email },
-    { slug: 'booking.cancelled.host', to: booking.host_email },
+    { slug: 'booking.cancelled.guest', to: booking.guest_email, hostId: booking.host_user_id },
+    { slug: 'booking.cancelled.host', to: booking.host_email, hostId: booking.host_user_id },
   ]) {
     const result = await dispatchTrigger(pool, {
       triggerSlug: trigger.slug,
       to: trigger.to,
+      hostId: trigger.hostId,
       dedupeKey: bookingDedupeKey(bookingId, trigger.slug),
       variables,
     });
@@ -208,6 +235,7 @@ export async function sendHostPayoutEmail(pool, bookingId) {
   const result = await dispatchTrigger(pool, {
     triggerSlug: 'payout.sent.host',
     to: booking.host_email,
+    hostId: booking.host_user_id,
     dedupeKey: bookingDedupeKey(bookingId, 'payout.sent.host'),
     variables,
   });
@@ -252,6 +280,31 @@ export async function processBookingLifecycleEmails(pool) {
      ORDER BY ess.step_order ASC`
   );
 
+  const { rows: lifecycleOverrides } = await pool.query(
+    `SELECT
+       host_id,
+       platform_step_slug,
+       delay_interval::text AS delay_interval,
+       delay_anchor,
+       is_active
+     FROM email_host_lifecycle_overrides
+     WHERE is_active = true`
+  );
+
+  const { rows: customHostTriggers } = await pool.query(
+    `SELECT
+       id,
+       host_id,
+       slug,
+       recipient_role,
+       send_timing
+     FROM email_triggers
+     WHERE is_host_custom = true
+       AND is_active = true
+       AND host_id IS NOT NULL
+       AND COALESCE(send_timing->>'mode', '') <> 'manual'`
+  );
+
   const { rows: bookings } = await pool.query(
     `SELECT
        b.id,
@@ -263,14 +316,18 @@ export async function processBookingLifecycleEmails(pool) {
        b.num_guests,
        b.total_amount,
        b.host_payout,
+       b.host_user_id,
        b.updated_at,
        p.title AS property_title,
        p.house_rules,
        guest.email AS guest_email,
-       guest.full_name AS guest_name
+       guest.full_name AS guest_name,
+       host.email AS host_email,
+       host.full_name AS host_name
      FROM bookings b
      JOIN properties p ON p.id = b.property_id
      JOIN profiles guest ON guest.id = b.guest_user_id
+     JOIN profiles host ON host.id = b.host_user_id
      WHERE b.status IN ('confirmed', 'checked_in', 'checked_out')
        AND b.check_out >= CURRENT_DATE - INTERVAL '3 days'
        AND b.check_in <= CURRENT_DATE + INTERVAL '14 days'`
@@ -283,17 +340,26 @@ export async function processBookingLifecycleEmails(pool) {
     const variables = buildBookingVariables(booking);
 
     for (const step of steps) {
-      const anchor = anchorDateTime(booking, step.delay_anchor);
-      const dueAt = addInterval(anchor, step.delay_interval);
+      const override = lifecycleOverrides.find(
+        (item) =>
+          item.host_id === booking.host_user_id && item.platform_step_slug === step.trigger_slug
+      );
+      const delayInterval = override?.delay_interval ?? step.delay_interval;
+      const delayAnchor = override?.delay_anchor ?? step.delay_anchor;
+      const anchor = anchorDateTime(booking, delayAnchor);
+      const dueAt = addInterval(anchor, delayInterval);
       if (!dueAt) continue;
 
       const graceMs = 36 * 60 * 60 * 1000;
       if (now < dueAt.getTime() || now > dueAt.getTime() + graceMs) continue;
 
       const dedupeKey = bookingDedupeKey(booking.id, step.trigger_slug, `step-${step.step_order}`);
+      const recipient =
+        step.recipient_role === 'host' ? booking.host_email : booking.guest_email;
       const result = await dispatchTrigger(pool, {
         triggerSlug: step.trigger_slug,
-        to: booking.guest_email,
+        to: recipient,
+        hostId: booking.host_user_id,
         dedupeKey,
         variables,
       });
@@ -302,6 +368,39 @@ export async function processBookingLifecycleEmails(pool) {
         bookingId: booking.id,
         trigger: step.trigger_slug,
         dueAt: dueAt.toISOString(),
+        ...result,
+      });
+    }
+
+    for (const customTrigger of customHostTriggers.filter(
+      (trigger) => trigger.host_id === booking.host_user_id
+    )) {
+      const timing = customTrigger.send_timing || {};
+      const delayAnchor = timing.anchor || 'trigger';
+      const delayInterval = timing.delay_interval || '0 seconds';
+      const anchor = anchorDateTime(booking, delayAnchor);
+      const dueAt = addInterval(anchor, delayInterval);
+      if (!dueAt) continue;
+
+      const graceMs = 36 * 60 * 60 * 1000;
+      if (now < dueAt.getTime() || now > dueAt.getTime() + graceMs) continue;
+
+      const dedupeKey = bookingDedupeKey(booking.id, customTrigger.slug, 'custom');
+      const recipient =
+        customTrigger.recipient_role === 'host' ? booking.host_email : booking.guest_email;
+      const result = await dispatchTrigger(pool, {
+        triggerSlug: customTrigger.slug,
+        to: recipient,
+        hostId: booking.host_user_id,
+        dedupeKey,
+        variables,
+      });
+
+      results.push({
+        bookingId: booking.id,
+        trigger: customTrigger.slug,
+        dueAt: dueAt.toISOString(),
+        custom: true,
         ...result,
       });
     }
