@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth, UserType } from '../contexts/AuthContext';
+import { getStoredReferralCode } from '../lib/referral';
 
 export type AuthMode = 'signin' | 'signup';
 type JoinIntent = 'guest' | 'host';
@@ -76,6 +77,15 @@ export default function AuthModal({
   const [loading, setLoading] = useState(false);
 
   const { signIn, signUp, signInWithOAuth } = useAuth();
+
+  useEffect(() => {
+    const storedReferral = getStoredReferralCode();
+    if (storedReferral) {
+      setReferralCode(storedReferral);
+      setJoinIntent('host');
+      setIsSignUp(true);
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

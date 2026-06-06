@@ -12,6 +12,7 @@ import HostDashboard from './components/HostDashboard';
 import CheckoutPage from './components/CheckoutPage';
 import PropertyDetailPage from './components/PropertyDetailPage';
 import { supabase, Property } from './lib/supabase';
+import { captureReferralFromSearch } from './lib/referral';
 import { showcaseProperties } from './data/showcase';
 
 const featuredMarkets = [
@@ -112,6 +113,7 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    captureReferralFromSearch(window.location.search);
     fetchProperties();
   }, []);
 

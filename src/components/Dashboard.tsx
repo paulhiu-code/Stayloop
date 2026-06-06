@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
 import PMSSettings from './PMSSettings';
 import StripeConnectCard from './StripeConnectCard';
+import ReferralShareCard from './ReferralShareCard';
 import type { SitePage } from './Header';
 
 type DashboardTab = 'overview' | 'properties' | 'bookings' | 'referrals' | 'pms';
@@ -436,6 +437,14 @@ export default function Dashboard({
 
               {activeTab === 'referrals' && (
                 <div>
+                  {profile?.referral_code && (
+                    <div className="mb-6">
+                      <ReferralShareCard
+                        referralCode={profile.referral_code}
+                        directReferrals={stats.totalReferrals}
+                      />
+                    </div>
+                  )}
                   <h3 className="text-lg font-bold text-gray-900 mb-4">Referral Network</h3>
                   <div className="bg-gradient-to-br from-orange-50 to-rose-50 rounded-xl p-6 mb-6">
                     <div className="flex items-center justify-between mb-4">

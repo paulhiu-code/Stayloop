@@ -18,8 +18,7 @@ export type BookingQuote = {
   hostPayout: number;
 };
 
-const GUEST_FEE_RATE = 0.05;
-const HOST_FEE_RATE = 0.1;
+import { calculateFeesFromTaxable, centsToDollars } from './fees';
 
 const ACTIVE_BOOKING_STATUSES = ['pending', 'confirmed', 'checked_in'] as const;
 
@@ -182,11 +181,11 @@ export function calculateQuote(
 
   const subtotal = nightlyRates.reduce((sum, night) => sum + night.rate, 0);
   const cleaningFee = Number(property.cleaning_fee || 0);
-  const taxable = subtotal + cleaningFee;
-  const guestServiceFee = Number((taxable * GUEST_FEE_RATE).toFixed(2));
-  const hostServiceFee = Number((taxable * HOST_FEE_RATE).toFixed(2));
-  const total = Number((taxable + guestServiceFee).toFixed(2));
-  const hostPayout = Number((taxable - hostServiceFee).toFixed(2));
+  const fees = calculateFeesFromTaxable(subtotal, cleaningFee);
+  const guestServiceFee = centsToDollars(fees.guestServiceFeeCents);
+  const hostServiceFee = centsToDollars(fees.hostServiceFeeCents);
+  const total = centsToDollars(fees.totalCents);
+  const hostPayout = centsToDollars(fees.hostPayoutCents);
 
   return {
     nights: nightDates.length,

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
@@ -15,6 +15,7 @@ import Header, { SitePage } from './Header';
 import AuthModal, { AuthMode } from './AuthModal';
 import { useAuth } from '../contexts/AuthContext';
 import { getStripeConnectStatus, isHostProfile } from '../lib/stripeConnect';
+import { captureReferralFromSearch } from '../lib/referral';
 
 type HostsPageProps = {
   onClose: () => void;
@@ -50,6 +51,10 @@ export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
   const [authMode, setAuthMode] = useState<AuthMode>('signup');
   const stripeStatus = getStripeConnectStatus(profile);
   const signedInHost = Boolean(user && isHostProfile(profile));
+
+  useEffect(() => {
+    captureReferralFromSearch(window.location.search);
+  }, []);
 
   function openAuth(mode: AuthMode = 'signup') {
     setAuthMode(mode);

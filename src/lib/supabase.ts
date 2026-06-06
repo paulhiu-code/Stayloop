@@ -91,5 +91,6 @@ export type ReferralEarning = {
   booking_date: string;
   payout_date: string | null;
   status: 'pending' | 'paid';
+  stripe_transfer_id?: string | null;
   created_at: string;
 };

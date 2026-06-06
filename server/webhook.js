@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import pg from 'pg';
+import { finalizeBookingPayment } from './revShare.js';
 
 const { Pool } = pg;
 
@@ -41,14 +42,7 @@ export async function handleStripeWebhook(req, res) {
     switch (event.type) {
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object;
-        await pool.query(
-          `UPDATE bookings
-             SET status = 'confirmed',
-                 updated_at = now()
-           WHERE stripe_payment_intent_id = $1
-             AND status = 'pending'`,
-          [paymentIntent.id]
-        );
+        await finalizeBookingPayment(paymentIntent.id);
         break;
       }
 

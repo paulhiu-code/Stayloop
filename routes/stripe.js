@@ -1,10 +1,12 @@
 import express from 'express';
 import Stripe from 'stripe';
 import pg from 'pg';
+import { calculateFeesFromTaxable, centsToDollars } from '../server/fees.js';
+import { finalizeBookingPayment } from '../server/revShare.js';
 
 const { Pool } = pg;
 
-export const PLATFORM_FEE_PERCENT = Number(process.env.PLATFORM_FEE_PERCENT || 10);
+export const PLATFORM_FEE_PERCENT = Number(process.env.PLATFORM_FEE_PERCENT || 10); // legacy; fees.js is canonical
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2024-06-20',
@@ -176,8 +178,14 @@ router.post('/api/bookings/create-payment-intent', requireUser, async (req, res,
       propertyId,
       hostStripeAccountId,
       totalAmountCents,
+      subtotalCents,
+      cleaningFeeCents,
+      hostPayoutCents,
+      guestServiceFeeCents,
+      hostServiceFeeCents,
       checkIn,
       checkOut,
+      numGuests,
     } = req.body;
 
     if (!propertyId || !hostStripeAccountId || !totalAmountCents || !checkIn || !checkOut) {
@@ -192,12 +200,28 @@ router.post('/api/bookings/create-payment-intent', requireUser, async (req, res,
       return res.status(404).json({ error: 'Host Stripe account not found' });
     }
 
-    const platformFeeCents = Math.round(totalAmountCents * (PLATFORM_FEE_PERCENT / 100));
+    const subtotal = Number(subtotalCents || 0) / 100;
+    const cleaningFee = Number(cleaningFeeCents || 0) / 100;
+    const expected = calculateFeesFromTaxable(subtotal, cleaningFee);
+
+    const normalizedTotal = Number(totalAmountCents);
+    const normalizedHostPayout = Number(hostPayoutCents || expected.hostPayoutCents);
+    const normalizedGuestFee = Number(guestServiceFeeCents || expected.guestServiceFeeCents);
+    const normalizedHostFee = Number(hostServiceFeeCents || expected.hostServiceFeeCents);
+
+    if (
+      Math.abs(normalizedTotal - expected.totalCents) > 1 ||
+      Math.abs(normalizedHostPayout - expected.hostPayoutCents) > 1
+    ) {
+      return res.status(400).json({ error: 'Checkout fee breakdown does not match platform fee rules' });
+    }
+
+    const applicationFeeCents = normalizedTotal - normalizedHostPayout;
 
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: totalAmountCents,
+      amount: normalizedTotal,
       currency: 'usd',
-      application_fee_amount: platformFeeCents,
+      application_fee_amount: applicationFeeCents,
       transfer_data: {
         destination: hostStripeAccountId,
       },
@@ -235,9 +259,9 @@ router.post('/api/bookings/create-payment-intent', requireUser, async (req, res,
          payout_status
        )
        VALUES (
-         $1, $2, $3, $2, $3, $4, $5, $4, $5, 1, GREATEST(($5::date - $4::date), 1),
-         $6 / 100.0, 0, 0, $7 / 100.0, $6 / 100.0, ($6 - $7) / 100.0,
-         'pending', $8, $8, $6, $7, 'pending'
+         $1, $2, $3, $2, $3, $4, $5, $4, $5, $14, GREATEST(($5::date - $4::date), 1),
+         $6, $7, $8, $9, $10, $11,
+         'pending', $12, $12, $10, $13, 'pending'
        )
        RETURNING id`,
       [
@@ -246,17 +270,67 @@ router.post('/api/bookings/create-payment-intent', requireUser, async (req, res,
         host.id,
         checkIn,
         checkOut,
-        totalAmountCents,
-        platformFeeCents,
+        centsToDollars(expected.subtotalCents),
+        centsToDollars(expected.cleaningFeeCents),
+        centsToDollars(normalizedGuestFee),
+        centsToDollars(normalizedHostFee),
+        centsToDollars(normalizedTotal),
+        centsToDollars(normalizedHostPayout),
         paymentIntent.id,
+        applicationFeeCents,
+        Number(numGuests || 1),
       ]
     );
 
     return res.json({
       bookingId: rows[0].id,
       clientSecret: paymentIntent.client_secret,
-      platformFeeCents,
+      applicationFeeCents,
+      hostPayoutCents: normalizedHostPayout,
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/api/bookings/:bookingId/confirm-payment', requireUser, async (req, res, next) => {
+  try {
+    const { bookingId } = req.params;
+    const { paymentIntentId } = req.body;
+
+    if (!paymentIntentId) {
+      return res.status(400).json({ error: 'paymentIntentId is required' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT id, guest_user_id, guest_id, stripe_payment_intent_id, status
+       FROM bookings
+       WHERE id = $1
+       LIMIT 1`,
+      [bookingId]
+    );
+
+    const booking = rows[0];
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const guestId = booking.guest_user_id || booking.guest_id;
+    if (guestId !== req.stayloopUserId) {
+      return res.status(403).json({ error: 'Booking does not belong to authenticated guest' });
+    }
+
+    if (booking.stripe_payment_intent_id !== paymentIntentId) {
+      return res.status(400).json({ error: 'Payment intent does not match booking' });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({ error: 'Payment has not succeeded yet' });
+    }
+
+    const result = await finalizeBookingPayment(paymentIntentId);
+    return res.json(result);
   } catch (error) {
     return next(error);
   }
