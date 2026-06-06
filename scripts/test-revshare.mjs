@@ -259,6 +259,23 @@ async function createTestConnectAccount(label) {
   return refreshed;
 }
 
+const STRIPE_TEST_RETURN_URL =
+  process.env.STRIPE_TEST_RETURN_URL || 'https://example.com/checkout/complete';
+
+async function createConfirmedTestPayment({ amount, applicationFeeCents, destination, metadata }) {
+  return stripe.paymentIntents.create({
+    amount,
+    currency: 'usd',
+    application_fee_amount: applicationFeeCents,
+    transfer_data: { destination },
+    payment_method_types: ['card'],
+    payment_method: 'pm_card_visa',
+    confirm: true,
+    return_url: STRIPE_TEST_RETURN_URL,
+    metadata,
+  });
+}
+
 async function seedPlatformBalance(amountCents) {
   await stripe.charges.create({
     amount: amountCents,
@@ -319,14 +336,10 @@ async function runStripeTest() {
   }
 
   const fees = calculateFeesFromTaxable(500, 50, 0);
-  const paymentIntent = await stripe.paymentIntents.create({
+  const paymentIntent = await createConfirmedTestPayment({
     amount: fees.totalCents,
-    currency: 'usd',
-    application_fee_amount: fees.applicationFeeCents,
-    transfer_data: { destination: hostAccountId },
-    payment_method: 'pm_card_visa',
-    confirm: true,
-    automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+    applicationFeeCents: fees.applicationFeeCents,
+    destination: hostAccountId,
     metadata: { test: 'stayloop-revshare-script' },
   });
 
@@ -422,14 +435,10 @@ async function runStripeReferralTest() {
       );
     }
 
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntent = await createConfirmedTestPayment({
       amount: fees.totalCents,
-      currency: 'usd',
-      application_fee_amount: fees.applicationFeeCents,
-      transfer_data: { destination: acctC.id },
-      payment_method: 'pm_card_visa',
-      confirm: true,
-      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+      applicationFeeCents: fees.applicationFeeCents,
+      destination: acctC.id,
       metadata: { test: 'stayloop-referral-chain' },
     });
     assert(paymentIntent.status === 'succeeded', 'Chain test PaymentIntent succeeded');

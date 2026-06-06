@@ -225,6 +225,8 @@ router.post('/api/bookings/create-payment-intent', requireUser, async (req, res,
       transfer_data: {
         destination: hostStripeAccountId,
       },
+      // Card-only checkout (CardElement) — avoids redirect-based methods that require return_url
+      payment_method_types: ['card'],
       metadata: {
         property_id: propertyId,
         guest_user_id: req.stayloopUserId,
