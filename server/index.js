@@ -42,6 +42,29 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// Verifies DATABASE_URL can reach Supabase Postgres.
+app.get('/health/db', async (_req, res) => {
+  if (!process.env.DATABASE_URL) {
+    return res.status(503).json({ ok: false, error: 'DATABASE_URL is not configured' });
+  }
+
+  try {
+    const pg = await import('pg');
+    const pool = new pg.default.Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+    });
+    const result = await pool.query('SELECT current_database() AS db, now() AS server_time');
+    await pool.end();
+    return res.json({ ok: true, database: result.rows[0]?.db, serverTime: result.rows[0]?.server_time });
+  } catch (err) {
+    return res.status(502).json({
+      ok: false,
+      error: err instanceof Error ? err.message : 'Database connection failed',
+    });
+  }
+});
+
 // Verifies the platform Stripe secret key can reach the StayLoop master account.
 app.get('/health/stripe', async (_req, res) => {
   if (!stripe) {
