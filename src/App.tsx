@@ -206,7 +206,7 @@ function AppContent() {
   }
 
   if (page === 'host-dashboard') {
-    return <HostDashboard onClose={() => navigate('home')} />;
+    return <HostDashboard onClose={() => navigate('home')} onNavigate={navigate} />;
   }
 
   if (page === 'checkout') {
@@ -226,7 +226,15 @@ function AppContent() {
   }
 
   if (showDashboard) {
-    return <Dashboard onClose={() => setShowDashboard(false)} />;
+    return (
+      <Dashboard
+        onClose={() => setShowDashboard(false)}
+        onNavigate={(nextPage) => {
+          setShowDashboard(false);
+          navigate(nextPage);
+        }}
+      />
+    );
   }
 
   return (

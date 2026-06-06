@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import Header, { SitePage } from './Header';
 import AuthModal, { AuthMode } from './AuthModal';
+import { useAuth } from '../contexts/AuthContext';
+import { getStripeConnectStatus, isHostProfile } from '../lib/stripeConnect';
 
 type HostsPageProps = {
   onClose: () => void;
@@ -43,8 +45,11 @@ const hostFeatures = [
 ];
 
 export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
+  const { user, profile } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('signup');
+  const stripeStatus = getStripeConnectStatus(profile);
+  const signedInHost = Boolean(user && isHostProfile(profile));
 
   function openAuth(mode: AuthMode = 'signup') {
     setAuthMode(mode);
@@ -78,13 +83,23 @@ export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
               StayLoop gives hosts a professional listing flow, lower platform economics, verified guests, and property management integrations without making the guest site about referrals.
             </p>
             <div className="mt-10 flex flex-wrap gap-4">
-              <button
-                onClick={() => openAuth('signup')}
-                className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-8 py-4 text-lg font-bold text-white shadow-xl transition hover:scale-105"
-              >
-                Start listing
-                <ArrowRight className="h-5 w-5" />
-              </button>
+              {signedInHost && stripeStatus !== 'active' ? (
+                <button
+                  onClick={() => onNavigate('host-onboarding')}
+                  className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-8 py-4 text-lg font-bold text-white shadow-xl transition hover:scale-105"
+                >
+                  Connect Stripe payouts
+                  <ArrowRight className="h-5 w-5" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => openAuth('signup')}
+                  className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-8 py-4 text-lg font-bold text-white shadow-xl transition hover:scale-105"
+                >
+                  Start listing
+                  <ArrowRight className="h-5 w-5" />
+                </button>
+              )}
               <button
                 onClick={() => onNavigate('partners')}
                 className="inline-flex items-center gap-3 rounded-2xl bg-white px-8 py-4 text-lg font-bold text-gray-900 shadow-xl transition hover:-translate-y-0.5"
@@ -93,6 +108,13 @@ export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
                 <Link2 className="h-5 w-5 text-orange-600" />
               </button>
             </div>
+            {signedInHost && (
+              <p className="mt-4 text-sm font-semibold text-orange-700">
+                {stripeStatus === 'active'
+                  ? 'Stripe payouts are connected on your account.'
+                  : 'After signup, connect Stripe so guests can book your listings and you can receive rev-share payouts.'}
+              </p>
+            )}
           </div>
 
           <div className="rounded-[2.5rem] bg-white p-5 shadow-2xl">

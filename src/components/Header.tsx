@@ -1,6 +1,7 @@
-import { LayoutDashboard, LogOut, Menu, Plane, User, X } from 'lucide-react';
+import { CreditCard, LayoutDashboard, LogOut, Menu, Plane, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { getStripeConnectStatus, isHostProfile } from '../lib/stripeConnect';
 import type { AuthMode } from './AuthModal';
 
 export type SitePage = 'home' | 'hosts' | 'partners' | 'host-onboarding' | 'host-dashboard' | 'checkout' | 'property';
@@ -20,6 +21,8 @@ export default function Header({
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, profile, signOut } = useAuth();
+  const showPayoutSetup =
+    user && isHostProfile(profile) && getStripeConnectStatus(profile) !== 'active';
 
   function goTo(page: SitePage) {
     onNavigate?.(page);
@@ -59,6 +62,15 @@ export default function Header({
 
             {user ? (
               <div className="flex items-center gap-4">
+                {showPayoutSetup && (
+                  <button
+                    onClick={() => goTo('host-onboarding')}
+                    className="flex items-center gap-2 rounded-lg bg-orange-50 px-4 py-2.5 font-semibold text-orange-700 transition hover:bg-orange-100"
+                  >
+                    <CreditCard className="h-5 w-5" />
+                    Connect payouts
+                  </button>
+                )}
                 <button
                   onClick={onShowDashboard}
                   className="flex items-center gap-2 px-4 py-2.5 text-gray-700 hover:text-orange-600 font-semibold transition-colors duration-200 rounded-lg hover:bg-orange-50"
@@ -124,6 +136,14 @@ export default function Header({
               ))}
               {user ? (
                 <>
+                  {showPayoutSetup && (
+                    <button
+                      onClick={() => goTo('host-onboarding')}
+                      className="text-left font-semibold text-orange-700 transition hover:text-orange-800"
+                    >
+                      Connect payouts
+                    </button>
+                  )}
                   <button
                     onClick={onShowDashboard}
                     className="text-left text-gray-700 hover:text-orange-600 font-medium transition"

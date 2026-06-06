@@ -14,11 +14,19 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
 import PMSSettings from './PMSSettings';
+import StripeConnectCard from './StripeConnectCard';
+import type { SitePage } from './Header';
 
 type DashboardTab = 'overview' | 'properties' | 'bookings' | 'referrals' | 'pms';
 type DashboardMode = 'guest' | 'host';
 
-export default function Dashboard({ onClose }: { onClose: () => void }) {
+export default function Dashboard({
+  onClose,
+  onNavigate,
+}: {
+  onClose: () => void;
+  onNavigate?: (page: SitePage) => void;
+}) {
   const { profile, updateUserType } = useAuth();
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [dashboardMode, setDashboardMode] = useState<DashboardMode>('guest');
@@ -197,6 +205,15 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <>
+          <div className="mb-8">
+            <StripeConnectCard
+              onNavigate={(page) => {
+                onClose();
+                onNavigate?.(page);
+              }}
+            />
+          </div>
+
           <div className="mb-8 bg-gradient-to-r from-orange-500 to-rose-500 rounded-2xl p-8 text-white shadow-xl">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -302,9 +319,28 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
                 <div className="space-y-6">
                   <div>
                     <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Activity</h3>
-                    <div className="text-gray-500 text-center py-12">
-                      No recent activity to display
-                    </div>
+                    {bookings.length === 0 ? (
+                      <div className="text-gray-500 text-center py-12">
+                        No recent reservations yet. Connect Stripe and sync properties to start receiving bookings.
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {bookings.slice(0, 5).map((booking) => (
+                          <div
+                            key={booking.id}
+                            className="flex items-center justify-between rounded-xl border border-gray-200 p-4"
+                          >
+                            <div>
+                              <div className="font-semibold text-gray-900">
+                                {booking.check_in} → {booking.check_out}
+                              </div>
+                              <div className="text-sm capitalize text-gray-500">{booking.status}</div>
+                            </div>
+                            <div className="text-right font-bold text-gray-900">${booking.total_amount}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

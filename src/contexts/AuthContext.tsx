@@ -14,6 +14,7 @@ type AuthContextType = {
   signInWithOAuth: (provider: OAuthProvider, userType?: UserType) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserType: (userType: UserType) => Promise<void>;
+  refreshProfile: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -171,8 +172,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await fetchProfile(user.id);
   }
 
+  async function refreshProfile() {
+    if (!user) return;
+    await fetchProfile(user.id);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signInWithOAuth, signOut, updateUserType }}>
+    <AuthContext.Provider
+      value={{ user, profile, loading, signUp, signIn, signInWithOAuth, signOut, updateUserType, refreshProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );

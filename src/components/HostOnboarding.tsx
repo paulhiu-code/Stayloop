@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../lib/api';
 
@@ -14,37 +14,42 @@ type OnboardingLinkResponse = {
 export default function HostOnboarding({ onClose }: { onClose: () => void }) {
   const { user } = useAuth();
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    async function startOnboarding() {
-      if (!user) {
-        setError('Please sign in before starting host onboarding.');
-        return;
-      }
-
-      try {
-        const account = await apiRequest<CreateAccountResponse>('/api/stripe/connect/create-account', {
-          method: 'POST',
-          body: {},
-        });
-
-        const origin = window.location.origin;
-        const accountLink = await apiRequest<OnboardingLinkResponse>('/api/stripe/connect/create-onboarding-link', {
-          method: 'POST',
-          body: {
-            accountId: account.accountId,
-            returnUrl: `${origin}/host-dashboard?account_id=${account.accountId}`,
-            refreshUrl: `${origin}/host-onboarding`,
-          },
-        });
-
-        window.location.href = accountLink.url;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unable to start Stripe onboarding.');
-      }
+  async function startOnboarding() {
+    if (!user) {
+      setError('Please sign in before starting host onboarding.');
+      return;
     }
 
-    startOnboarding();
+    setLoading(true);
+    setError('');
+
+    try {
+      const account = await apiRequest<CreateAccountResponse>('/api/stripe/connect/create-account', {
+        method: 'POST',
+        body: {},
+      });
+
+      const origin = window.location.origin;
+      const accountLink = await apiRequest<OnboardingLinkResponse>('/api/stripe/connect/create-onboarding-link', {
+        method: 'POST',
+        body: {
+          accountId: account.accountId,
+          returnUrl: `${origin}/host-dashboard?account_id=${account.accountId}`,
+          refreshUrl: `${origin}/host-onboarding`,
+        },
+      });
+
+      window.location.href = accountLink.url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to start Stripe onboarding.');
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void startOnboarding();
   }, [user]);
 
   return (
@@ -59,6 +64,14 @@ export default function HostOnboarding({ onClose }: { onClose: () => void }) {
           <>
             <h1 className="text-3xl font-extrabold text-gray-900">Stripe onboarding needs attention</h1>
             <p className="mt-4 rounded-2xl bg-rose-50 p-4 text-rose-700">{error}</p>
+            <button
+              onClick={() => void startOnboarding()}
+              disabled={loading}
+              className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-6 py-3 font-bold text-white shadow-lg disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+              Try again
+            </button>
           </>
         ) : (
           <>
