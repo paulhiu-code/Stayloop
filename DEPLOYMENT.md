@@ -8,7 +8,9 @@ Use Vercel for the StayLoop frontend. This project is a Vite React app, so Verce
 
 1. Merge the latest StayLoop PR into `main`.
 2. Create or open your Supabase project.
-3. Apply the Supabase migrations in `supabase/migrations`.
+3. Apply the Supabase migrations in `supabase/migrations` (latest: `20260607000000_email_lifecycle_and_confirmed_at.sql` adds `bookings.confirmed_at` and fixes lifecycle email timing).
+   - Linked project: `supabase db push`
+   - Or paste each new migration into the Supabase SQL editor in order.
 4. Copy these values from Supabase:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`

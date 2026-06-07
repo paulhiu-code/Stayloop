@@ -26,6 +26,7 @@ async function loadBookingContext(pool, bookingId) {
        b.guest_user_id,
        b.host_user_id,
        b.updated_at,
+       b.confirmed_at,
        p.title AS property_title,
        p.house_rules,
        guest.email AS guest_email,
@@ -136,12 +137,14 @@ export async function confirmBookingAndSendEmails(pool, { bookingId, paymentInte
     await pool.query(
       `UPDATE bookings
        SET status = 'confirmed',
+           confirmed_at = COALESCE(confirmed_at, now()),
            updated_at = now()
        WHERE id = $1
          AND status = 'pending'`,
       [bookingId]
     );
     booking.status = 'confirmed';
+    booking.confirmed_at = new Date();
   }
 
   const variables = buildBookingVariables(booking);
@@ -264,6 +267,7 @@ export async function processBookingLifecycleEmails(pool) {
        b.total_amount,
        b.host_payout,
        b.updated_at,
+       b.confirmed_at,
        p.title AS property_title,
        p.house_rules,
        guest.email AS guest_email,
@@ -272,8 +276,8 @@ export async function processBookingLifecycleEmails(pool) {
      JOIN properties p ON p.id = b.property_id
      JOIN profiles guest ON guest.id = b.guest_user_id
      WHERE b.status IN ('confirmed', 'checked_in', 'checked_out')
-       AND b.check_out >= CURRENT_DATE - INTERVAL '3 days'
-       AND b.check_in <= CURRENT_DATE + INTERVAL '14 days'`
+       AND COALESCE(b.check_out_date, b.check_out) >= CURRENT_DATE - INTERVAL '3 days'
+       AND COALESCE(b.check_in_date, b.check_in) <= CURRENT_DATE + INTERVAL '14 days'`
   );
 
   const now = Date.now();

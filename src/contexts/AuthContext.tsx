@@ -28,6 +28,13 @@ function authRedirectUrl(path: string): string {
   return `${window.location.origin}${path}`;
 }
 
+function requestWelcomeEmail() {
+  if (!import.meta.env.VITE_API_BASE_URL) return;
+  apiRequest('/api/account/send-welcome', { method: 'POST' }).catch((welcomeError) => {
+    console.error('Welcome email request failed:', welcomeError);
+  });
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -82,6 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (updateError) throw updateError;
         window.localStorage.removeItem('stayloop_pending_user_type');
         setProfile(updatedProfile);
+        requestWelcomeEmail();
         return;
       }
 
@@ -90,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setProfile(data);
+      requestWelcomeEmail();
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
@@ -143,12 +152,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (profileError) throw profileError;
     await fetchProfile(authData.user.id);
-
-    if (import.meta.env.VITE_API_BASE_URL) {
-      apiRequest('/api/account/send-welcome', { method: 'POST' }).catch((welcomeError) => {
-        console.error('Welcome email request failed:', welcomeError);
-      });
-    }
 
     return { needsEmailConfirmation: false };
   }

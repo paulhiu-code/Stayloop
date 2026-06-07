@@ -81,7 +81,7 @@ JOIN (
 ON CONFLICT (trigger_id) DO NOTHING;
 
 INSERT INTO email_sequences (slug, name, description, anchor_trigger_id, is_active)
-SELECT 'booking.lifecycle', 'Booking lifecycle', 'Confirmation, pre-arrival reminders, and review request.', id, true
+SELECT 'booking.lifecycle', 'Booking lifecycle', 'Confirmation, pre-arrival (48h before check-in), day-of reminder, and review request (3h after checkout).', id, true
 FROM email_triggers WHERE slug = 'booking.confirmed.guest'
 ON CONFLICT (slug) DO NOTHING;
 
@@ -91,8 +91,9 @@ FROM email_sequences s
 JOIN (
   VALUES
     ('booking.lifecycle', 'booking.confirmed.guest', 0, interval '0 seconds', 'trigger'),
-    ('booking.lifecycle', 'booking.reminder.checkin.guest', 1, interval '-7 days', 'check_in'),
-    ('booking.lifecycle', 'review.request.guest', 2, interval '1 day', 'check_out')
+    ('booking.lifecycle', 'booking.reminder.checkin.guest', 1, interval '-2 days', 'check_in'),
+    ('booking.lifecycle', 'booking.reminder.checkin.guest', 2, interval '0 days', 'check_in'),
+    ('booking.lifecycle', 'review.request.guest', 3, interval '3 hours', 'check_out')
 ) AS steps(sequence_slug, trigger_slug, step_order, delay_interval, delay_anchor)
   ON s.slug = steps.sequence_slug
 JOIN email_triggers t ON t.slug = steps.trigger_slug
