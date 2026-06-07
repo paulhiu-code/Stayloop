@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "server": "node --env-file=.env.local server/index.js",
-    "start": "node --env-file=.env.local server/index.js"
+    "start": "node server/index.js"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.3.0",
