@@ -9,17 +9,12 @@ type ApiOptions = Omit<RequestInit, 'body'> & {
 export async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
-  const userId = sessionData.session?.user.id;
 
   const headers = new Headers(options.headers);
   headers.set('Content-Type', 'application/json');
 
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
-  }
-
-  if (userId) {
-    headers.set('X-User-Id', userId);
   }
 
   const body =
