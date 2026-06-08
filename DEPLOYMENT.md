@@ -32,7 +32,19 @@ Do not use the placeholder values from `.env`.
    - `VITE_SUPABASE_ANON_KEY`
    - `VITE_API_BASE_URL`
    - `VITE_STRIPE_PUBLISHABLE_KEY`
+   - `VITE_DESIGN_LAB` = `true` (Preview environment only — enables Design Lab on branch previews)
 7. Click **Deploy**.
+
+## Design preview deployments
+
+StayLoop supports branch-based design review without affecting production. See `DESIGN_REVIEW.md` for the full workflow.
+
+**How it works:**
+- Each PR/branch gets an automatic unlisted Vercel Preview URL
+- Stakeholders review at `/design-lab` or direct surface links with `?variant=`
+- Only merge approved design branches into `main`
+
+**Supabase Auth for previews:** add `https://*.vercel.app/**` to allowed redirect URLs so sign-in works on preview deployments.
 
 ## After deploying
 

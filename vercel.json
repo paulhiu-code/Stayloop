@@ -4,6 +4,12 @@
   "outputDirectory": "dist",
   "headers": [
     {
+      "source": "/design-lab",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         { "key": "X-Frame-Options", "value": "DENY" },

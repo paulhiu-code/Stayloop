@@ -19,6 +19,9 @@ import { searchProperties, type SearchFilters } from './lib/search';
 import { buildSearchPath, parseSearchParams } from './lib/searchUrl';
 import { normalizeAmenities } from './lib/property';
 import SearchResultsPage from './components/search/SearchResultsPage';
+import DesignLabPage from './components/design-lab/DesignLabPage';
+import DesignPreviewBanner from './components/design-lab/DesignPreviewBanner';
+import { isDesignLabEnabled } from './lib/designVariants';
 
 const featuredMarkets = [
   {
@@ -73,7 +76,8 @@ function propertyIdFromPath(path: string): string | null {
   return match?.[1] || null;
 }
 
-function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' {
+function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' | 'design-lab' {
+  if (path === '/design-lab') return 'design-lab';
   if (path === '/admin') return 'admin';
   if (path === '/reset-password') return 'reset-password';
   if (path === '/search' || path.startsWith('/search/')) return 'search';
@@ -87,10 +91,11 @@ function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' {
 }
 
 function pathFromPage(
-  page: SitePage | 'reset-password' | 'admin',
+  page: SitePage | 'reset-password' | 'admin' | 'design-lab',
   propertyId?: string,
   searchQuery?: string
 ) {
+  if (page === 'design-lab') return '/design-lab';
   if (page === 'admin') return '/admin';
   if (page === 'reset-password') return '/reset-password';
   if (page === 'search') {
@@ -111,7 +116,9 @@ function AppContent() {
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [showDashboard, setShowDashboard] = useState(false);
-  const [page, setPage] = useState<SitePage | 'reset-password' | 'admin'>(() => pageFromPath(window.location.pathname));
+  const [page, setPage] = useState<SitePage | 'reset-password' | 'admin' | 'design-lab'>(() =>
+    pageFromPath(window.location.pathname)
+  );
   const [searchQuery, setSearchQuery] = useState(() => window.location.search);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,7 +180,10 @@ function AppContent() {
     }
   }
 
-  function navigate(nextPage: SitePage | 'reset-password' | 'admin', options?: { propertyId?: string; path?: string }) {
+  function navigate(
+    nextPage: SitePage | 'reset-password' | 'admin' | 'design-lab',
+    options?: { propertyId?: string; path?: string }
+  ) {
     const path =
       options?.path ||
       (nextPage === 'admin'
@@ -190,6 +200,12 @@ function AppContent() {
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+
+  useEffect(() => {
+    if (page === 'design-lab' && !isDesignLabEnabled()) {
+      navigate('home');
+    }
+  }, [page]);
 
   function goToCheckout(path: string) {
     navigate('checkout', { path });
@@ -219,6 +235,11 @@ function AppContent() {
         </div>
       </div>
     );
+  }
+
+  if (page === 'design-lab') {
+    if (!isDesignLabEnabled()) return null;
+    return <DesignLabPage onClose={() => navigate('home')} />;
   }
 
   if (page === 'admin') {
@@ -571,6 +592,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppContent />
+      <DesignPreviewBanner />
     </AuthProvider>
   );
 }
