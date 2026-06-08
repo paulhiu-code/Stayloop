@@ -48,6 +48,7 @@ export async function sendNewMessageEmail(pool, {
 }
 
 export async function sendPmsSyncFailedEmail(pool, {
+  hostUserId,
   hostEmail,
   hostName,
   pmsProvider,
@@ -56,7 +57,7 @@ export async function sendPmsSyncFailedEmail(pool, {
   return dispatchTrigger(pool, {
     triggerSlug: 'pms.sync.failed',
     to: hostEmail,
-    dedupeKey: `pms-sync:${hostEmail}:${new Date().toISOString().slice(0, 13)}`,
+    dedupeKey: `pms-sync:${hostUserId}:${new Date().toISOString().slice(0, 13)}`,
     variables: {
       host_name: hostName || 'Host',
       pms_provider: pmsProvider || 'PMS',

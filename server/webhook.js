@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import pg from 'pg';
-import { confirmBookingByPaymentIntent, sendBookingCancelledEmails } from './booking-emails.js';
+import { confirmBookingByPaymentIntent } from './booking-emails.js';
 
 const { Pool } = pg;
 
@@ -42,19 +42,14 @@ export async function handleStripeWebhook(req, res) {
       case 'payment_intent.payment_failed':
       case 'payment_intent.canceled': {
         const paymentIntent = event.data.object;
-        const { rows } = await pool.query(
+        await pool.query(
           `UPDATE bookings
              SET status = 'cancelled',
                  updated_at = now()
            WHERE stripe_payment_intent_id = $1
-             AND status = 'pending'
-           RETURNING id`,
+             AND status = 'pending'`,
           [paymentIntent.id]
         );
-
-        if (rows[0]?.id) {
-          await sendBookingCancelledEmails(pool, rows[0].id);
-        }
         break;
       }
 

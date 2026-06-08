@@ -68,12 +68,6 @@ export async function sendTriggerEmail({ trigger, to, variables }) {
     throw new Error(payload?.error || `send-email failed with ${response.status}`);
   }
 
-  if (dedupeKey && poolFromEnv()) {
-    // send-email logs delivery; patch dedupe_key via direct insert is redundant since
-    // send-email already logs. For dedupe we rely on metadata in log from send-email.
-    // The edge function stores variables in metadata — we need dedupe_key there too.
-  }
-
   return payload;
 }
 
