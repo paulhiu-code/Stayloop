@@ -1,103 +1,98 @@
 # StayLoop Deployment Guide
 
-## Recommended host
+## Architecture
 
-Use Vercel for the StayLoop frontend. This project is a Vite React app, so Vercel should build the site with `npm run build` and publish the `dist` directory.
+StayLoop runs on **one Vercel project** (frontend + API):
+
+| Layer | Location |
+|-------|----------|
+| React frontend | Vercel static build (`dist/`) |
+| Stripe + payments API | Vercel serverless (`/api/*`) |
+| Database + Auth | Supabase |
+| Transactional email | Supabase Edge Function (`send-email`) + Resend |
+
+**Production URLs:** [stay-loop.co](https://stay-loop.co) · [stayloop-eta.vercel.app](https://stayloop-eta.vercel.app)
 
 ## Before deploying
 
-1. Merge the latest StayLoop PR into `main`.
-2. Create or open your Supabase project.
-3. Apply the Supabase migrations in `supabase/migrations` (latest: `20260607000000_email_lifecycle_and_confirmed_at.sql` adds `bookings.confirmed_at` and fixes lifecycle email timing).
+1. Ensure `main` is up to date on GitHub (Vercel auto-deploys from `main`).
+2. Apply Supabase migrations in `supabase/migrations/` in order.
+   - Critical for Stripe: `20260517000000_stripe_connect.sql`, `20260606120000_revshare_fixes.sql`
    - Linked project: `supabase db push`
-   - Or paste each new migration into the Supabase SQL editor in order.
-4. Copy these values from Supabase:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
+   - Or run each new file in the Supabase SQL editor.
+3. Configure Vercel environment variables (see below).
 
-Do not use the placeholder values from `.env`.
+## Vercel environment variables
 
-## Deploy on Vercel
+### Public (frontend — `VITE_` prefix)
 
-1. Go to https://vercel.com.
-2. Sign in with GitHub.
-3. Click **Add New... → Project**.
-4. Import the `Stayloop` GitHub repository.
-5. Use these settings:
-   - Framework preset: `Vite`
-   - Build command: `npm run build`
-   - Output directory: `dist`
-6. Add these environment variables in Vercel:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_API_BASE_URL`
-   - `VITE_STRIPE_PUBLISHABLE_KEY`
-7. Click **Deploy**.
+| Variable | Example |
+|----------|---------|
+| `VITE_SUPABASE_URL` | `https://xxxx.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | `eyJ...` |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | `pk_test_...` |
+
+`VITE_API_BASE_URL` is **optional** on Vercel — the app calls `/api/...` on the same domain.
+
+### Secret (server — never use `VITE_` prefix)
+
+| Variable | Source |
+|----------|--------|
+| `DATABASE_URL` | Supabase → Database → **Session pooler** connection string |
+| `STRIPE_SECRET_KEY` | Stripe Dashboard → API keys |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Webhooks → signing secret |
+| `SUPABASE_URL` | Same as `VITE_SUPABASE_URL` |
+| `SUPABASE_ANON_KEY` | Same as `VITE_SUPABASE_ANON_KEY` |
+| `SITE_URL` | `https://stay-loop.co` |
+| `ALLOWED_REDIRECT_ORIGINS` | `https://stay-loop.co,https://www.stay-loop.co` |
+
+Push vars via API:
+
+```bash
+VERCEL_TOKEN=xxx VERCEL_PROJECT_ID=prj_xxx node --env-file=.env.local scripts/configure-vercel-env.mjs
+```
+
+Never expose `STRIPE_SECRET_KEY` or `STRIPE_WEBHOOK_SECRET` in `VITE_*` variables.
+
+## Stripe webhook
+
+1. Stripe Dashboard → **Developers → Webhooks → Add endpoint**
+2. URL: `https://stay-loop.co/api/stripe/webhook`
+3. Scope: **Your account**
+4. Events: `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`, `account.updated`
+5. Copy signing secret → Vercel `STRIPE_WEBHOOK_SECRET`
+6. Redeploy Vercel
 
 ## After deploying
 
-1. Open the generated Vercel URL and confirm the homepage loads.
-2. Sign up or sign in.
-3. Confirm dashboard access.
-4. Confirm search and featured listings render.
-5. In Supabase Auth settings, add your Vercel domain to allowed redirect URLs.
-6. When ready, connect your custom domain.
-
-## OwnerRez production note
-
-The PMS screen is present in the app, but the OwnerRez self-serve OAuth flow still needs production credentials and callback URLs. Once the production domain is live, use it when configuring OwnerRez OAuth redirect URLs.
-
-## Stripe production note
-
-Stripe Connect needs a Node/Express API host in addition to the Vercel frontend. Start the API with `npm run server`, then set these server-side environment variables:
-
-- `DATABASE_URL`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `SITE_URL` (optional; defaults to `https://stay-loop.co`)
-- `PLATFORM_FEE_PERCENT` (optional; defaults to `10`)
-- `PORT` (optional; defaults to `4000`)
-- `CORS_ORIGIN` (optional; defaults to `*`)
-
-Point Stripe webhooks at `POST /api/stripe/webhook`. On `payment_intent.succeeded`, the API confirms the booking and sends guest/host confirmation plus payment receipt emails via the CMS.
-
-Never expose `STRIPE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in Vercel frontend environment variables.
-
-Schedule lifecycle emails (check-in reminders, review requests) by calling the API cron endpoint hourly:
-
 ```bash
-curl -X POST "https://YOUR_API_HOST/api/cron/process-emails" \
-  -H "Authorization: Bearer YOUR_CRON_SECRET"
+curl https://stay-loop.co/api/health
+curl https://stay-loop.co/api/health/db
 ```
 
-Set `CRON_SECRET` (or `EMAIL_CRON_SECRET`) on the Express API host. Booking lifecycle cadence follows Airbnb-style timing: pre-arrival 48 hours before check-in, day-of reminder on check-in date, review request 3 hours after checkout.
+Expected: `"status":"ok"`, `"stripeConfigured":true`, `"databaseConfigured":true`.
 
-## Email (Resend) setup
+Add your Vercel domain to Supabase Auth → URL configuration.
 
-StayLoop sends transactional email through Resend via the `send-email` Supabase Edge Function.
-
-1. Create a Resend account and verify your sending domain.
-2. In Supabase → Project Settings → Edge Functions → Secrets, add:
-   - `RESEND_API_KEY`
-   - `EMAIL_FROM` (example: `StayLoop <noreply@stay-loop.co>`)
-   - `EMAIL_REPLY_TO` (optional; example: `support@stay-loop.co` once inbound MX is verified)
-3. Deploy the `send-email` function.
-4. Test the connection:
+## Local development
 
 ```bash
-curl -s "https://YOUR_PROJECT_REF.supabase.co/functions/v1/send-email" \
-  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
-  -H "apikey: YOUR_SERVICE_ROLE_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"action":"test","to":"you@example.com"}'
+npm run dev                              # frontend :5173
+npm run server                           # Express API :4000 (optional)
 ```
 
-For auth emails (signup verification and password reset), configure Supabase Auth SMTP with Resend:
+For local API, set `VITE_API_BASE_URL=http://localhost:4000` in `.env.local`.
 
-- Host: `smtp.resend.com`
-- Port: `465` (SSL) or `587` (STARTTLS)
-- Username: `resend`
-- Password: your `RESEND_API_KEY`
+Local webhooks:
+
+```bash
+stripe listen --forward-to localhost:4000/api/stripe/webhook
+```
+
+## Email (Resend)
+
+Transactional email uses the `send-email` Supabase Edge Function. Configure Resend secrets in Supabase Edge Function settings. See existing email CMS migrations in `supabase/migrations/`.
+
+## Testing
+
+See [docs/STRIPE_TESTING.md](./docs/STRIPE_TESTING.md) for the full Stripe + rev-share test checklist.

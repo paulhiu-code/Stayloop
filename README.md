@@ -2,61 +2,79 @@
 
 [![Open in Bolt](https://bolt.new/static/open-in-bolt.svg)](https://bolt.new/~/sb1-jkfqchxx)
 
-StayLoop is a Vite + React + TypeScript marketplace backed by Supabase, with an Express API for Stripe and email automation.
+StayLoop is a Vite + React + TypeScript marketplace backed by Supabase, with Stripe Connect payments and rev-share on Vercel serverless.
+
+**Live:** [stay-loop.co](https://stay-loop.co)
 
 ## Production stack
 
 | Layer | Host | Status |
-|---|---|---|
-| Frontend | [Vercel](https://stay-loop.co) | Live |
+|-------|------|--------|
+| Frontend + Stripe API | [Vercel](https://stay-loop.co) (`/api/*` serverless) | Live |
 | Database + Auth | Supabase (`glmzeapxusbsuhixhbqw`) | Live |
 | Edge Functions | Supabase (`send-email`, PMS sync) | Deployed |
-| Express API | Not deployed yet | Pending Stripe setup |
+| Stripe webhooks | `https://stay-loop.co/api/stripe/webhook` | Configured (test mode) |
 
-## Development
+## Quick start (development)
+
+```bash
+npm ci
+cp .env.example .env.local   # fill in Supabase + Stripe test keys
+npm run dev                  # frontend → http://localhost:5173
+npm run server               # optional local API → http://localhost:4000
+```
 
 | Task | Command |
-|---|---|
-| Install | `npm ci` |
-| Dev server | `npm run dev` |
+|------|---------|
 | Lint | `npm run lint` |
 | Typecheck | `npm run typecheck` |
 | Build | `npm run build` |
-| API server | `npm run server` |
+| Rev-share tests | `npm run test:revshare` |
 
-See `AGENTS.md` for Cloud Agent instructions and `DEPLOYMENT.md` for the full deploy checklist.
+## Documentation
 
-## Required environment variables
+| Doc | Purpose |
+|-----|---------|
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Vercel + Supabase deploy checklist |
+| [docs/STRIPE_TESTING.md](./docs/STRIPE_TESTING.md) | Stripe Connect + rev-share test guide |
+| [AGENTS.md](./AGENTS.md) | Cloud Agent instructions |
+| [.env.example](./.env.example) | Environment variable reference |
 
-**Vercel (frontend)**
+## Architecture
 
-- `VITE_SUPABASE_URL` — `https://<project-ref>.supabase.co` (no `/rest/v1/` suffix)
-- `VITE_SUPABASE_ANON_KEY`
-- `VITE_API_BASE_URL` — Express API URL (when deployed)
-- `VITE_STRIPE_PUBLISHABLE_KEY` — when Stripe is configured
+```
+Browser → Vercel (React SPA + /api serverless)
+              ↓
+         Supabase (auth, Postgres, edge functions)
+              ↓
+         Stripe (Connect destination charges, webhooks)
+```
 
-**Express API** (see `.env.example`)
+- **Payments** run as Vercel serverless functions in `/api/` — no separate API host required.
+- **Rev-share** logic lives in `server/fees.js` (canonical) with DB triggers + Stripe transfers in `server/revShare.js`.
+- **Local dev:** set `VITE_API_BASE_URL=http://localhost:4000` and run `npm run server`.
 
-- `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (when Stripe is configured)
-- `CRON_SECRET`, `SITE_URL`
+## Environment variables (Vercel)
 
-## Repository branches
+**Public (frontend):** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_STRIPE_PUBLISHABLE_KEY`
 
-`main` is the single source of truth for production. Feature work should branch from `main` using `cursor/<description>-abc8`.
+**Secret (server — no `VITE_` prefix):** `DATABASE_URL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SITE_URL`, `ALLOWED_REDIRECT_ORIGINS`
 
-**Merged into main (safe to delete):** search/browse, Stripe Connect scaffold, OwnerRez PMS sync, Email CMS, category pills, email QA fixes, homepage crash fix, and related fix branches.
+See `.env.example` for the full list. Use `scripts/configure-vercel-env.mjs` to push vars via Vercel API.
 
-**Open for future work (not in main yet):**
+## Repository
 
-| Branch | Purpose |
-|---|---|
-| `cursor/wire-up-runnable-backend-2375` | Rev-share fee engine, referral payouts, API deploy config |
-| `cursor/schema-str-parity-2375` | Dashboard wiring, schema parity, manual properties |
-| `cursor/resend-email-foundation-c899` | Host-scoped guest correspondence CMS |
-| `cursor/guest-booking-sprint-a09d` | Booking schema cleanup + seed alignment |
-| `cursor/supabase-cloud-setup-2375` | Supabase cloud setup guide + runnable API notes |
+- **`main`** — production source of truth (auto-deploys to Vercel)
+- Feature branches: `cursor/<description>-<id>`
+- CI: lint, typecheck, build on every push/PR to `main`
 
-## CI
+Merged feature work (Stripe Vercel API, rev-share, search, email CMS, OwnerRez PMS) is on `main`. Stale `cursor/*` branches can be deleted on GitHub when no longer needed.
 
-GitHub Actions runs lint, typecheck, and build on every push/PR to `main`.
+## Stripe test mode checklist
+
+1. `GET /api/health` → all configured flags `true`
+2. Host completes Connect onboarding
+3. Guest checkout with `4242 4242 4242 4242`
+4. Booking `confirmed` in Supabase + payment in Stripe Dashboard
+
+Full steps: [docs/STRIPE_TESTING.md](./docs/STRIPE_TESTING.md)
