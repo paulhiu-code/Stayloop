@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Bath, Bed, Loader2, MapPin, Users } from 'lucide-react';
 import { supabase, type Property } from '../lib/supabase';
+import { normalizeAmenities } from '../lib/property';
 import BookingWidget from './BookingWidget';
 
 type PropertyDetailPageProps = {
@@ -42,7 +43,7 @@ export default function PropertyDetailPage({
           return;
         }
 
-        setProperty(data as Property);
+        setProperty({ ...(data as Property), amenities: normalizeAmenities(data.amenities) });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to load this stay.');
       } finally {

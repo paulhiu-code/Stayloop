@@ -1,6 +1,7 @@
 import { BadgeCheck, Bath, Bed, CalendarCheck, MapPin, Star, Users } from 'lucide-react';
 import type { Property } from '../lib/supabase';
 import type { ShowcaseProperty } from '../data/showcase';
+import { normalizeAmenities } from '../lib/property';
 
 type PropertyCardData = Property | ShowcaseProperty;
 
@@ -50,6 +51,7 @@ export default function PropertyCard({
   searchContext?: PropertyCardSearchContext;
 }) {
   const mainImage = property.images[0] || 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=1200';
+  const amenities = normalizeAmenities(property.amenities);
   const meta = getPropertyMeta(property, searchContext);
   const canNavigate = UUID_PATTERN.test(property.id) && Boolean(onViewStay);
   const showStayTotal = searchContext?.totalPrice != null && searchContext.nights != null && searchContext.nights > 0;
@@ -143,7 +145,7 @@ export default function PropertyCard({
         </div>
 
         <div className="mb-5 flex flex-wrap gap-2">
-          {property.amenities.slice(0, 3).map((amenity) => (
+          {amenities.slice(0, 3).map((amenity) => (
             <span key={amenity} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
               {amenity}
             </span>

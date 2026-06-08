@@ -17,6 +17,7 @@ import { supabase, Property } from './lib/supabase';
 import { showcaseProperties } from './data/showcase';
 import { searchProperties, type SearchFilters } from './lib/search';
 import { buildSearchPath, parseSearchParams } from './lib/searchUrl';
+import { normalizeAmenities } from './lib/property';
 import SearchResultsPage from './components/search/SearchResultsPage';
 
 const featuredMarkets = [
@@ -163,7 +164,7 @@ function AppContent() {
           .order('created_at', { ascending: false })
           .limit(12);
         if (fallbackError) throw fallbackError;
-        setProperties(data || []);
+        setProperties((data || []).map((property) => ({ ...property, amenities: normalizeAmenities(property.amenities) })));
       } catch (fallbackErr) {
         console.error('Fallback fetch failed:', fallbackErr);
       }

@@ -1,5 +1,6 @@
 import { stayCategories } from '../data/showcase';
 import { nightsBetween } from './booking';
+import { normalizeAmenities } from './property';
 import { supabase, type Property } from './supabase';
 
 export type SearchSort = 'recommended' | 'price_asc' | 'price_desc' | 'rating' | 'newest';
@@ -158,6 +159,7 @@ function enrichProperty(
 
   return {
     ...property,
+    amenities: normalizeAmenities(property.amenities),
     avg_rating: avgRating,
     review_count: reviewCount,
     nights,

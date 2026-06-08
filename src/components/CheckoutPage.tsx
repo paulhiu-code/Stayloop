@@ -5,7 +5,8 @@ import { ArrowLeft, CheckCircle, Loader2 } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { supabase } from '../lib/supabase';
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim();
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 type CheckoutFormProps = {
   bookingId: string;
@@ -193,10 +194,16 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
 
             {error && <div className="rounded-2xl bg-rose-50 p-4 text-rose-700">{error}</div>}
 
-            {clientSecret && bookingId && (
+            {clientSecret && bookingId && stripePromise && (
               <Elements stripe={stripePromise}>
                 <CheckoutForm bookingId={bookingId} clientSecret={clientSecret} />
               </Elements>
+            )}
+
+            {clientSecret && bookingId && !stripePromise && (
+              <div className="rounded-2xl bg-amber-50 p-4 text-amber-900">
+                Stripe checkout is not configured yet. Your booking details are saved — payment will be available once Stripe is set up.
+              </div>
             )}
           </div>
         </div>
