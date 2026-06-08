@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "seed:email-cms": "node scripts/seed-email-cms.mjs",
-    "server": "node server/index.js"
+    "server": "node server/index.js",
+    "deploy:supabase": "bash scripts/deploy-supabase.sh",
+    "deploy:vercel": "bash scripts/deploy-vercel.sh"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.3.0",

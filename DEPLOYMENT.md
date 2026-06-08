@@ -1,5 +1,9 @@
 # StayLoop Deployment Guide
 
+> **One-time secrets setup:** see [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) and copy [`docs/secrets.local.template.env`](docs/secrets.local.template.env) to `secrets.local.env`.
+
+> **Cursor Cloud Agents:** read [`AGENTS.md`](AGENTS.md) for autonomous deploy rules.
+
 ## Recommended host
 
 Use Vercel for the StayLoop frontend. This project is a Vite React app, so Vercel should build the site with `npm run build` and publish the `dist` directory.

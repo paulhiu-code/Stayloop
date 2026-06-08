@@ -21,6 +21,9 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.env.local
+.env.*.local
+secrets.local.env
 .env.vercel
 supabase/.temp/
 .vercel
