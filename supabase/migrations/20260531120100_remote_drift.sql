@@ -1,0 +1,2 @@
+-- Placeholder: this migration was applied on the hosted Supabase project before
+-- it was captured in git. Kept for migration history parity only.
