@@ -118,8 +118,8 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
         return;
       }
 
-      if (!import.meta.env.VITE_API_BASE_URL) {
-        setError('Payments are not configured yet. Your dates are saved — checkout will work once the API is live.');
+      if (!stripePublishableKey) {
+        setError('Payments are not configured yet. Add VITE_STRIPE_PUBLISHABLE_KEY to enable checkout.');
         setLoading(false);
         return;
       }
@@ -128,7 +128,6 @@ export default function CheckoutPage({ onClose }: { onClose: () => void }) {
         const payload = {
           propertyId,
           hostStripeAccountId,
-          totalAmountCents,
           checkIn,
           checkOut,
           numGuests: Number(numGuests || 1),
