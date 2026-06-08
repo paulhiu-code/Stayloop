@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 
+// Same-origin on Vercel; override with VITE_API_BASE_URL for local API on a different port.
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
 
 type ApiOptions = Omit<RequestInit, 'body'> & {

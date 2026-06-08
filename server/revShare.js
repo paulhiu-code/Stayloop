@@ -1,16 +1,5 @@
-import Stripe from 'stripe';
-import pg from 'pg';
-
-const { Pool } = pg;
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-06-20',
-});
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
-});
+import { getPool } from './lib/db.js';
+import { getStripe } from './lib/stripe.js';
 
 /**
  * After a booking is confirmed, pay upstream referrers from the platform Stripe
@@ -18,6 +7,9 @@ const pool = new Pool({
  * this function executes the money movement.
  */
 export async function distributeReferralPayouts(bookingId, paymentIntentId) {
+  const pool = getPool();
+  const stripe = getStripe();
+
   const { rows: earnings } = await pool.query(
     `SELECT
        re.id,
@@ -101,6 +93,8 @@ export async function distributeReferralPayouts(bookingId, paymentIntentId) {
  * Confirm booking after successful payment and run referral accrual + payouts.
  */
 export async function finalizeBookingPayment(paymentIntentId) {
+  const pool = getPool();
+
   const { rows } = await pool.query(
     `UPDATE bookings
      SET status = 'confirmed',

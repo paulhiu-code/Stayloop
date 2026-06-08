@@ -1,12 +1,8 @@
 import express from 'express';
-import Stripe from 'stripe';
 import stripeRouter from '../routes/stripe.js';
-import { authenticateUser } from './auth.js';
+import { authenticateUser } from './lib/auth.js';
+import { getDbHealth, getHealth, getStripeHealth } from './handlers/health.js';
 import { handleStripeWebhook } from './webhook.js';
-
-const stripe = process.env.STRIPE_SECRET_KEY
-  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
-  : null;
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -22,72 +18,38 @@ app.use((req, res, next) => {
   return next();
 });
 
-// Stripe webhooks must be verified against the raw request body, so this route
-// is registered before the JSON body parser and without auth (Stripe signs the
-// request instead of sending a user session).
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
 
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'stayloop-api',
-    stripeConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
-    databaseConfigured: Boolean(process.env.DATABASE_URL),
-    supabaseAuthConfigured: Boolean(
-      (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) &&
-        (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)
-    ),
-  });
+  res.json(getHealth());
 });
 
-// Verifies DATABASE_URL can reach Supabase Postgres.
 app.get('/health/db', async (_req, res) => {
-  if (!process.env.DATABASE_URL) {
-    return res.status(503).json({ ok: false, error: 'DATABASE_URL is not configured' });
-  }
-
   try {
-    const pg = await import('pg');
-    const pool = new pg.default.Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
-    });
-    const result = await pool.query('SELECT current_database() AS db, now() AS server_time');
-    await pool.end();
-    return res.json({ ok: true, database: result.rows[0]?.db, serverTime: result.rows[0]?.server_time });
+    const result = await getDbHealth();
+    return res.json(result);
   } catch (err) {
-    return res.status(502).json({
+    return res.status(err.statusCode || 502).json({
       ok: false,
       error: err instanceof Error ? err.message : 'Database connection failed',
     });
   }
 });
 
-// Verifies the platform Stripe secret key can reach the StayLoop master account.
 app.get('/health/stripe', async (_req, res) => {
-  if (!stripe) {
-    return res.status(503).json({ ok: false, error: 'STRIPE_SECRET_KEY is not configured' });
-  }
-
   try {
-    const balance = await stripe.balance.retrieve();
-    return res.json({
-      ok: true,
-      mode: process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ? 'live' : 'test',
-      available: balance.available,
-      pending: balance.pending,
-    });
+    const result = await getStripeHealth();
+    return res.json(result);
   } catch (err) {
-    return res.status(502).json({
+    return res.status(err.statusCode || 502).json({
       ok: false,
       error: err instanceof Error ? err.message : 'Stripe connection failed',
     });
   }
 });
 
-// Everything below requires a verified Supabase session.
 app.use(authenticateUser);
 app.use(stripeRouter);
 
