@@ -37,26 +37,62 @@ interface SyncRequest {
   webhookData?: any;
 }
 
+function getServiceRoleKey(): string | undefined {
+  return (
+    Deno.env.get('STAYLOOP_SUPABASE_SERVICE_ROLE_KEY') ||
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
+    undefined
+  );
+}
+
+function createServiceSupabaseClient() {
+  const supabaseUrl = Deno.env.get('STAYLOOP_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = getServiceRoleKey();
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Missing Supabase URL or service role key.');
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('STAYLOOP_SUPABASE_URL')!,
-      Deno.env.get('STAYLOOP_SUPABASE_SERVICE_ROLE_KEY')!
-    );
+    const supabase = createServiceSupabaseClient();
 
     const { action, pmsConnectionId, listingId, webhookData }: SyncRequest = await req.json();
 
-    // Get PMS connection details
-    const { data: connection, error: connError } = await supabase
+    let authedUserId: string | null = null;
+    if (action !== 'webhook') {
+      const authHeader = req.headers.get('Authorization') || '';
+      const token = authHeader.replace('Bearer ', '');
+      const { data: userData, error: userError } = await supabase.auth.getUser(token);
+
+      if (userError || !userData.user) {
+        return new Response(JSON.stringify({ success: false, error: 'Not authenticated' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      authedUserId = userData.user.id;
+    }
+
+    let connectionQuery = supabase
       .from('pms_connections')
       .select('*')
       .eq('id', pmsConnectionId)
-      .eq('pms_provider', 'guesty')
-      .single();
+      .eq('pms_provider', 'guesty');
+
+    if (authedUserId) {
+      connectionQuery = connectionQuery.eq('user_id', authedUserId);
+    }
+
+    const { data: connection, error: connError } = await connectionQuery.single();
 
     if (connError || !connection) {
       throw new Error('PMS connection not found');

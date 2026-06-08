@@ -42,6 +42,7 @@ export interface PMSConnection {
   last_sync_at: string | null;
   sync_status: 'pending' | 'syncing' | 'completed' | 'failed';
   sync_error: string | null;
+  webhook_secret: string;
   created_at: string;
   updated_at: string;
 }

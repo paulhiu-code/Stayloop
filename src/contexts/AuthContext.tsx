@@ -121,14 +121,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let referrerId = null;
     if (referralCode) {
-      const { data: referrer } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('referral_code', referralCode.toUpperCase())
-        .maybeSingle();
+      const { data: referrerIdFromRpc, error: referrerError } = await supabase.rpc(
+        'lookup_referrer_id',
+        { p_referral_code: referralCode.toUpperCase() }
+      );
 
-      if (referrer) {
-        referrerId = referrer.id;
+      if (referrerError) throw referrerError;
+      if (referrerIdFromRpc) {
+        referrerId = referrerIdFromRpc;
       }
     }
 

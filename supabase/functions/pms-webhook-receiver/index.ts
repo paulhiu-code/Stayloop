@@ -3,7 +3,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
+  'Access-Control-Allow-Headers':
+    'Content-Type, Authorization, X-Client-Info, Apikey, x-stayloop-signature',
 };
 
 function getServiceRoleKey(): string | undefined {
@@ -25,6 +26,44 @@ function createServiceSupabaseClient() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
+function resolveWebhookSecret(connection: Record<string, unknown>): string {
+  const direct = connection.webhook_secret;
+  if (typeof direct === 'string' && direct.length > 0) {
+    return direct;
+  }
+
+  const credentials = connection.api_credentials as Record<string, unknown> | null;
+  const nested = credentials?.webhook_secret;
+  if (typeof nested === 'string' && nested.length > 0) {
+    return nested;
+  }
+
+  return '';
+}
+
+async function verifyWebhookSignature(
+  rawBody: string,
+  signatureHeader: string | null,
+  secret: string
+): Promise<boolean> {
+  if (!signatureHeader || !secret) return false;
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const digest = await crypto.subtle.sign('sha256', key, new TextEncoder().encode(rawBody));
+  const expected = Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+
+  const provided = signatureHeader.replace(/^sha256=/i, '').trim();
+  return provided === expected;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -35,7 +74,8 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get('STAYLOOP_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = getServiceRoleKey()!;
 
-    const webhookData = await req.json();
+    const rawBody = await req.text();
+    const webhookData = rawBody ? JSON.parse(rawBody) : {};
 
     const url = new URL(req.url);
     const provider = url.searchParams.get('provider');
@@ -61,6 +101,15 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: 'Invalid or inactive connection' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    const webhookSecret = resolveWebhookSecret(connection as Record<string, unknown>);
+    const signature = req.headers.get('x-stayloop-signature');
+    if (!(await verifyWebhookSignature(rawBody, signature, webhookSecret))) {
+      return new Response(JSON.stringify({ error: 'Invalid webhook signature' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const syncFunctionName = provider === 'ownerrez' ? 'pms-ownerrez-sync' : 'pms-guesty-sync';

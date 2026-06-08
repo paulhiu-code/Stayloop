@@ -6,11 +6,15 @@ import { handleStripeWebhook } from './webhook.js';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const corsOrigin = process.env.CORS_ORIGIN || '*';
+const corsOrigin = process.env.CORS_ORIGIN || process.env.SITE_URL;
+if (!corsOrigin && process.env.NODE_ENV === 'production') {
+  throw new Error('CORS_ORIGIN or SITE_URL must be configured in production');
+}
+const resolvedCorsOrigin = corsOrigin || 'http://localhost:5173';
 
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', corsOrigin);
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Id');
+  res.header('Access-Control-Allow-Origin', resolvedCorsOrigin);
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);

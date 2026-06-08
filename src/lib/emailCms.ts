@@ -73,6 +73,15 @@ export const EMAIL_CATEGORIES = [
   'review',
 ] as const;
 
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function renderTemplateString(
   template: string,
   variables: Record<string, string | number | boolean | null | undefined>
@@ -80,7 +89,7 @@ export function renderTemplateString(
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => {
     const value = variables[key];
     if (value === null || value === undefined) return '';
-    return String(value);
+    return escapeHtml(String(value));
   });
 }
 

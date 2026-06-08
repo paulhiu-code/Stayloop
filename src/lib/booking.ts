@@ -201,16 +201,16 @@ export function calculateQuote(
 }
 
 export async function fetchHostStripeAccountId(hostId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('stripe_account_id, stripe_charges_enabled')
-    .eq('id', hostId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc('get_host_stripe_account', {
+    p_host_id: hostId,
+  });
 
   if (error) throw error;
-  if (!data?.stripe_account_id || !data.stripe_charges_enabled) {
-    return data?.stripe_account_id || null;
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.stripe_account_id || !row?.stripe_charges_enabled) {
+    return row?.stripe_account_id || null;
   }
 
-  return data.stripe_account_id;
+  return row.stripe_account_id;
 }

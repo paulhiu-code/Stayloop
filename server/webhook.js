@@ -10,7 +10,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : undefined,
 });
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
