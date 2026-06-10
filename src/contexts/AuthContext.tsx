@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { apiRequest } from '../lib/api';
+import { getGoogleClientId, requestGoogleIdToken } from '../lib/googleSignIn';
 import { supabase, Profile } from '../lib/supabase';
 
 export type UserType = Profile['user_type'];
@@ -176,7 +177,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   }
 
+  async function signInWithGoogle(userType?: UserType) {
+    if (userType) {
+      window.localStorage.setItem('stayloop_pending_user_type', userType);
+    }
+
+    const clientId = getGoogleClientId();
+    if (clientId) {
+      try {
+        const idToken = await requestGoogleIdToken(clientId);
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+        });
+        if (error) throw error;
+        return;
+      } catch (gisError) {
+        const message = gisError instanceof Error ? gisError.message : '';
+        if (message.includes('cancelled') || message.includes('timed out')) {
+          throw gisError;
+        }
+        console.warn('Google Identity Services sign-in failed, falling back to redirect:', gisError);
+      }
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+
+    if (error) throw error;
+  }
+
   async function signInWithOAuth(provider: OAuthProvider, userType?: UserType) {
+    if (provider === 'google') {
+      await signInWithGoogle(userType);
+      return;
+    }
+
     if (userType) {
       window.localStorage.setItem('stayloop_pending_user_type', userType);
     }
