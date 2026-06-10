@@ -40,6 +40,54 @@ const DEFAULTS = {
   ALLOWED_REDIRECT_ORIGINS: 'https://stay-loop.co,https://www.stay-loop.co',
 };
 
+function decodeJwtPayload(token) {
+  try {
+    const segment = token.split('.')[1];
+    if (!segment) return null;
+    return JSON.parse(Buffer.from(segment, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+async function validateSupabaseAnonKey(supabaseUrl, anonKey) {
+  if (!supabaseUrl || !anonKey) {
+    throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY (or VITE_* variants) are required.');
+  }
+
+  const normalizedUrl = supabaseUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
+
+  if (anonKey.startsWith('eyJ')) {
+    const payload = decodeJwtPayload(anonKey);
+    if (!payload?.ref) {
+      throw new Error('SUPABASE_ANON_KEY looks like a JWT but the payload is unreadable.');
+    }
+    const projectRef = normalizedUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+    if (projectRef && payload.ref !== projectRef) {
+      throw new Error(
+        `SUPABASE_ANON_KEY project ref (${payload.ref}) does not match SUPABASE_URL (${projectRef}).`
+      );
+    }
+  }
+
+  const response = await fetch(`${normalizedUrl}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email: 'env-check@stay-loop.invalid', password: 'invalid-password-check' }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (body?.message === 'Invalid API key') {
+    throw new Error(
+      'SUPABASE_ANON_KEY was rejected by Supabase. Copy a fresh anon/publishable key from Project Settings → API.'
+    );
+  }
+}
+
 async function vercelFetch(path, options = {}) {
   const url = new URL(`https://api.vercel.com${path}`);
   if (teamId) url.searchParams.set('teamId', teamId);
@@ -104,6 +152,20 @@ async function upsertEnv(pid, key, value, targets) {
 async function main() {
   const pid = await resolveProjectId();
   const targets = ['production', 'preview'];
+
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  console.log('\nValidating Supabase anon key...');
+  await validateSupabaseAnonKey(supabaseUrl, anonKey);
+  console.log('  ✓ Supabase anon key accepted');
+
+  if (
+    process.env.VITE_SUPABASE_ANON_KEY &&
+    process.env.SUPABASE_ANON_KEY &&
+    process.env.VITE_SUPABASE_ANON_KEY !== process.env.SUPABASE_ANON_KEY
+  ) {
+    throw new Error('VITE_SUPABASE_ANON_KEY and SUPABASE_ANON_KEY must match.');
+  }
 
   console.log('\nSetting server env vars...');
   for (const key of SERVER_VARS) {
