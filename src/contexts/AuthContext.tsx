@@ -29,7 +29,7 @@ function authRedirectUrl(path: string): string {
 }
 
 function requestWelcomeEmail() {
-  if (!import.meta.env.VITE_API_BASE_URL) return;
+  // Same-origin when API runs on Vercel (/api/*); apiRequest uses relative paths when VITE_API_BASE_URL is unset.
   apiRequest('/api/account/send-welcome', { method: 'POST' }).catch((welcomeError) => {
     console.error('Welcome email request failed:', welcomeError);
   });
