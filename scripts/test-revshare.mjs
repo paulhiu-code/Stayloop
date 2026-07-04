@@ -111,6 +111,36 @@ async function pickHosts() {
   return rows;
 }
 
+/**
+ * Seed a profile's Stripe Connect onboarding state for test fixtures.
+ *
+ * The `protect_profile_privileged_columns` trigger silently reverts writes to
+ * stripe_* columns unless `is_admin_user()` is true. Tests run over the
+ * privileged service connection (no auth.uid()), so briefly disable user
+ * triggers for just this fixture write, then restore normal behavior.
+ */
+async function seedProfileStripeState(
+  id,
+  { accountId, chargesEnabled = true, payoutsEnabled = true, onboardingComplete = true }
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('SET session_replication_role = replica');
+    await client.query(
+      `UPDATE profiles
+         SET stripe_account_id = $1,
+             stripe_charges_enabled = $2,
+             stripe_payouts_enabled = $3,
+             stripe_onboarding_complete = $4
+       WHERE id = $5`,
+      [accountId, chargesEnabled, payoutsEnabled, onboardingComplete, id]
+    );
+  } finally {
+    await client.query('SET session_replication_role = origin').catch(() => {});
+    client.release();
+  }
+}
+
 async function runDbTests() {
   console.log('\n=== DB referral accrual (booking confirmation trigger) ===');
 
@@ -333,15 +363,20 @@ async function runStripeTest() {
 
   const hosts = await pickHosts();
   const listingHost = hosts.find((h) => h.email?.includes('playpark')) || hosts[0];
-  await pool.query(
-    `UPDATE profiles
-     SET stripe_account_id = $1,
-         stripe_charges_enabled = true,
-         stripe_payouts_enabled = $2,
-         stripe_onboarding_complete = true
-     WHERE id = $3`,
-    [hostAccountId, account.payouts_enabled, listingHost.id]
+
+  const { rows: savedHostRows } = await pool.query(
+    `SELECT stripe_account_id, stripe_charges_enabled, stripe_payouts_enabled, stripe_onboarding_complete
+     FROM profiles WHERE id = $1`,
+    [listingHost.id]
   );
+  const savedHost = savedHostRows[0] || {};
+
+  await seedProfileStripeState(listingHost.id, {
+    accountId: hostAccountId,
+    chargesEnabled: true,
+    payoutsEnabled: account.payouts_enabled,
+    onboardingComplete: true,
+  });
 
   const { rows: props } = await pool.query(
     `SELECT id FROM properties WHERE host_id = $1 LIMIT 1`,
@@ -349,6 +384,12 @@ async function runStripeTest() {
   );
   if (!props[0]) {
     fail('Test property', 'No property for listing host');
+    await seedProfileStripeState(listingHost.id, {
+      accountId: savedHost.stripe_account_id ?? null,
+      chargesEnabled: savedHost.stripe_charges_enabled ?? false,
+      payoutsEnabled: savedHost.stripe_payouts_enabled ?? false,
+      onboardingComplete: savedHost.stripe_onboarding_complete ?? false,
+    });
     return;
   }
 
@@ -390,12 +431,21 @@ async function runStripeTest() {
     ]
   );
 
-  const result = await finalizeBookingPayment(paymentIntent.id);
-  assert(Boolean(result.bookingId), 'finalizeBookingPayment confirmed booking');
-  assert(result.payouts.length === 0, 'No upstream referrers → zero Stripe referrer transfers');
-  console.log(`    Stripe PI ${paymentIntent.id} | booking ${result.bookingId} | platform fee ${fees.applicationFeeCents}¢ | host transfer ${fees.hostPayoutCents}¢`);
+  try {
+    const result = await finalizeBookingPayment(paymentIntent.id);
+    assert(Boolean(result.bookingId), 'finalizeBookingPayment confirmed booking');
+    assert(result.payouts.length === 0, 'No upstream referrers → zero Stripe referrer transfers');
+    console.log(`    Stripe PI ${paymentIntent.id} | booking ${result.bookingId} | platform fee ${fees.applicationFeeCents}¢ | host transfer ${fees.hostPayoutCents}¢`);
 
-  await cleanupBooking(rows[0].id);
+    await cleanupBooking(rows[0].id);
+  } finally {
+    await seedProfileStripeState(listingHost.id, {
+      accountId: savedHost.stripe_account_id ?? null,
+      chargesEnabled: savedHost.stripe_charges_enabled ?? false,
+      payoutsEnabled: savedHost.stripe_payouts_enabled ?? false,
+      onboardingComplete: savedHost.stripe_onboarding_complete ?? false,
+    });
+  }
 }
 
 async function runStripeReferralTest() {
@@ -413,10 +463,13 @@ async function runStripeReferralTest() {
     referred_by: h.referred_by,
     stripe_account_id: null,
     stripe_charges_enabled: null,
+    stripe_payouts_enabled: null,
+    stripe_onboarding_complete: null,
   }));
 
   const savedStripe = await pool.query(
-    `SELECT id, stripe_account_id, stripe_charges_enabled FROM profiles WHERE id = ANY($1::uuid[])`,
+    `SELECT id, stripe_account_id, stripe_charges_enabled, stripe_payouts_enabled, stripe_onboarding_complete
+     FROM profiles WHERE id = ANY($1::uuid[])`,
     [hosts.map((h) => h.id)]
   );
   for (const row of savedStripe.rows) {
@@ -424,6 +477,8 @@ async function runStripeReferralTest() {
     if (entry) {
       entry.stripe_account_id = row.stripe_account_id;
       entry.stripe_charges_enabled = row.stripe_charges_enabled;
+      entry.stripe_payouts_enabled = row.stripe_payouts_enabled;
+      entry.stripe_onboarding_complete = row.stripe_onboarding_complete;
     }
   }
 
@@ -444,12 +499,12 @@ async function runStripeReferralTest() {
       [hostB, acctB],
       [hostC, acctC],
     ]) {
-      await pool.query(
-        `UPDATE profiles
-         SET stripe_account_id = $1, stripe_charges_enabled = true, stripe_payouts_enabled = true, stripe_onboarding_complete = true
-         WHERE id = $2`,
-        [acct.id, host.id]
-      );
+      await seedProfileStripeState(host.id, {
+        accountId: acct.id,
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        onboardingComplete: true,
+      });
     }
 
     const paymentIntent = await createConfirmedTestPayment({
@@ -513,14 +568,16 @@ async function runStripeReferralTest() {
     await cleanupBooking(rows[0].id);
   } finally {
     for (const row of saved) {
-      await pool.query(
-        `UPDATE profiles
-         SET referred_by = $1,
-             stripe_account_id = $2,
-             stripe_charges_enabled = COALESCE($3, false)
-         WHERE id = $4`,
-        [row.referred_by, row.stripe_account_id, row.stripe_charges_enabled, row.id]
-      );
+      await pool.query(`UPDATE profiles SET referred_by = $1 WHERE id = $2`, [
+        row.referred_by,
+        row.id,
+      ]);
+      await seedProfileStripeState(row.id, {
+        accountId: row.stripe_account_id,
+        chargesEnabled: row.stripe_charges_enabled ?? false,
+        payoutsEnabled: row.stripe_payouts_enabled ?? false,
+        onboardingComplete: row.stripe_onboarding_complete ?? false,
+      });
     }
   }
 }

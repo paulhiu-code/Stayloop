@@ -94,6 +94,8 @@ Referrers need Stripe Connect for **paid** transfers; otherwise earnings stay `p
 | Booking stays `pending` after payment | Check webhook secret + Stripe webhook delivery logs |
 | Reserve blocked — host Stripe | Host must finish Connect onboarding |
 | Wrong commission amounts | Ensure migration `20260704030000_raveshare_partner_split.sql` is applied |
+| `--stripe` referral transfers stay `pending` | The `protect_profile_privileged_columns` trigger reverts `stripe_*` writes for non-admin roles; `test-revshare.mjs` seeds fixture Stripe state with `session_replication_role = replica`, so run it with a DB role allowed to set that (Supabase `postgres`) |
+| Login fails with `Legacy API keys are disabled` | Use the project's **publishable** key (`sb_publishable_…`) for `VITE_SUPABASE_ANON_KEY`, not the legacy JWT `anon` key |
 
 ## Key files
 
