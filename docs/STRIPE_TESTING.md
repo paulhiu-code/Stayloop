@@ -93,7 +93,7 @@ Referrers need Stripe Connect for **paid** transfers; otherwise earnings stay `p
 | API 401 on checkout | Guest must be signed in |
 | Booking stays `pending` after payment | Check webhook secret + Stripe webhook delivery logs |
 | Reserve blocked — host Stripe | Host must finish Connect onboarding |
-| Wrong commission amounts | Ensure migration `20260704000000_raveshare_partner_split.sql` is applied |
+| Wrong commission amounts | Ensure migration `20260704030000_raveshare_partner_split.sql` is applied |
 
 ## Key files
 
