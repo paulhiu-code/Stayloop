@@ -14,10 +14,11 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { getHostListings } from '../../lib/listing';
 import type { Property } from '../../lib/supabase';
-import Header from '../Header';
+import Header, { type SitePage } from '../Header';
 
 type BecomeHostHubProps = {
   onExit: () => void;
+  onNavigate: (page: SitePage) => void;
   onCreateListing: () => void;
   onEditListing: (listingId: string) => void;
   onSetupPayouts: () => void;
@@ -34,6 +35,7 @@ type ChecklistStep = {
 
 export default function BecomeHostHub({
   onExit,
+  onNavigate,
   onCreateListing,
   onEditListing,
   onSetupPayouts,
@@ -129,7 +131,7 @@ export default function BecomeHostHub({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header onShowAuth={() => {}} onShowDashboard={onViewDashboard} showHostLinks />
+      <Header onShowAuth={() => {}} onShowDashboard={onViewDashboard} onNavigate={onNavigate} showHostLinks />
 
       <div className="mx-auto max-w-5xl px-4 py-8 sm:py-12">
         <button
@@ -147,7 +149,7 @@ export default function BecomeHostHub({
           </div>
         ) : (
           <>
-            <div className="rounded-3xl bg-white p-6 shadow-xl sm:p-8">
+            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
               <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-600">Become a host</p>
               <h1 className="mt-3 text-3xl font-extrabold text-gray-900 sm:text-4xl">
                 You&apos;re {Math.round(progressPercent)}% of the way to hosting on StayLoop
@@ -182,8 +184,8 @@ export default function BecomeHostHub({
                 return (
                   <div
                     key={step.number}
-                    className={`rounded-2xl border bg-white p-5 shadow-xl transition sm:p-6 ${
-                      step.done ? 'border-green-100' : 'border-gray-100'
+                    className={`rounded-2xl border bg-white p-5 shadow-sm transition sm:p-6 ${
+                      step.done ? 'border-green-200' : 'border-gray-200'
                     }`}
                   >
                     <div className="flex gap-4 sm:gap-5">
@@ -309,7 +311,7 @@ export default function BecomeHostHub({
               </div>
 
               {!hasListings ? (
-                <div className="rounded-3xl border border-dashed border-gray-200 bg-white p-10 text-center shadow-xl">
+                <div className="rounded-3xl border border-dashed border-gray-300 bg-white p-10 text-center shadow-sm">
                   <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-50">
                     <Home className="h-8 w-8 text-orange-500" />
                   </div>
@@ -346,7 +348,7 @@ function ListingRow({ property, onEdit }: { property: Property; onEdit: () => vo
   const location = [property.city, property.state].filter(Boolean).join(', ');
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl bg-white p-4 shadow-xl sm:flex-row sm:items-center sm:p-5">
+    <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition hover:shadow-md sm:flex-row sm:items-center sm:p-5">
       <div className="h-28 w-full shrink-0 overflow-hidden rounded-2xl bg-gray-100 sm:h-24 sm:w-36">
         {coverImage ? (
           <img src={coverImage} alt="" className="h-full w-full object-cover" />

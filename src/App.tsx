@@ -315,6 +315,7 @@ function AppContent() {
     return (
       <BecomeHostHub
         onExit={() => navigate('home')}
+        onNavigate={navigate}
         onCreateListing={() => navigate('host-new')}
         onEditListing={(id) => navigate('host-edit', { propertyId: id })}
         onSetupPayouts={() => navigate('host-onboarding')}

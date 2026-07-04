@@ -1,3 +1,5 @@
+import type { LucideIcon } from 'lucide-react';
+import { Building, Building2, Castle, Home, Sofa, Sparkles, Trees, TreePine, Warehouse } from 'lucide-react';
 import { supabase, type Property } from './supabase';
 import { normalizeAmenities } from './property';
 
@@ -24,17 +26,17 @@ export type PropertyTypeValue =
 export const PROPERTY_TYPE_OPTIONS: {
   value: PropertyTypeValue;
   label: string;
-  icon: string;
+  icon: LucideIcon;
 }[] = [
-  { value: 'house', label: 'House', icon: '🏠' },
-  { value: 'apartment', label: 'Apartment', icon: '🏢' },
-  { value: 'condo', label: 'Condo', icon: '🏬' },
-  { value: 'villa', label: 'Villa', icon: '🏘️' },
-  { value: 'cabin', label: 'Cabin', icon: '🌲' },
-  { value: 'cottage', label: 'Cottage', icon: '🏡' },
-  { value: 'townhouse', label: 'Townhouse', icon: '🏙️' },
-  { value: 'loft', label: 'Loft', icon: '🛋️' },
-  { value: 'other', label: 'Other', icon: '✨' },
+  { value: 'house', label: 'House', icon: Home },
+  { value: 'apartment', label: 'Apartment', icon: Building2 },
+  { value: 'condo', label: 'Condo', icon: Building },
+  { value: 'villa', label: 'Villa', icon: Castle },
+  { value: 'cabin', label: 'Cabin', icon: TreePine },
+  { value: 'cottage', label: 'Cottage', icon: Trees },
+  { value: 'townhouse', label: 'Townhouse', icon: Warehouse },
+  { value: 'loft', label: 'Loft', icon: Sofa },
+  { value: 'other', label: 'Other', icon: Sparkles },
 ];
 
 export type PlaceTypeValue = 'entire' | 'private_room' | 'shared_room';
