@@ -14,6 +14,7 @@ import CheckoutPage from './components/CheckoutPage';
 import AdminDashboard from './components/AdminDashboard';
 import ResetPasswordPage from './components/ResetPasswordPage';
 import PropertyDetailPage from './components/PropertyDetailPage';
+import VariationsPage from './components/VariationsPage';
 import { supabase, Property } from './lib/supabase';
 import { showcaseProperties } from './data/showcase';
 import { searchProperties, type SearchFilters } from './lib/search';
@@ -75,8 +76,9 @@ function propertyIdFromPath(path: string): string | null {
   return match?.[1] || null;
 }
 
-function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' {
+function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' | 'demo' {
   if (path === '/admin') return 'admin';
+  if (path === '/demo') return 'demo';
   if (path === '/reset-password') return 'reset-password';
   if (path === '/search' || path.startsWith('/search/')) return 'search';
   if (path === '/hosts') return 'hosts';
@@ -89,11 +91,12 @@ function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' {
 }
 
 function pathFromPage(
-  page: SitePage | 'reset-password' | 'admin',
+  page: SitePage | 'reset-password' | 'admin' | 'demo',
   propertyId?: string,
   searchQuery?: string
 ) {
   if (page === 'admin') return '/admin';
+  if (page === 'demo') return '/demo';
   if (page === 'reset-password') return '/reset-password';
   if (page === 'search') {
     return searchQuery ? `/search?${searchQuery}` : '/search';
@@ -113,7 +116,7 @@ function AppContent() {
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [showDashboard, setShowDashboard] = useState(false);
-  const [page, setPage] = useState<SitePage | 'reset-password' | 'admin'>(() => pageFromPath(window.location.pathname));
+  const [page, setPage] = useState<SitePage | 'reset-password' | 'admin' | 'demo'>(() => pageFromPath(window.location.pathname));
   const [searchQuery, setSearchQuery] = useState(() => window.location.search);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,7 +178,7 @@ function AppContent() {
     }
   }
 
-  function navigate(nextPage: SitePage | 'reset-password' | 'admin', options?: { propertyId?: string; path?: string }) {
+  function navigate(nextPage: SitePage | 'reset-password' | 'admin' | 'demo', options?: { propertyId?: string; path?: string }) {
     const path = withThemeParam(
       options?.path ||
         (nextPage === 'admin'
@@ -262,6 +265,10 @@ function AppContent() {
     }
 
     return <AdminDashboard onClose={() => navigate('home')} adminEmail={profile?.email} />;
+  }
+
+  if (page === 'demo') {
+    return <VariationsPage onEnterHome={() => navigate('home')} />;
   }
 
   if (page === 'reset-password') {
