@@ -21,9 +21,9 @@ type PartnersPageProps = {
 };
 
 const splitRows = [
-  ['Level 1', '3%', 'Direct referral', 'Highest reward for the host who did the acquisition work.'],
-  ['Level 2', '2%', 'Their referral', 'Keeps upstream hosts engaged without overpaying passive depth.'],
-  ['Level 3', '1%', 'Third level', 'Creates network effects while preserving marketplace margin.'],
+  ['Level 1', '2%', 'Direct referral', 'Highest reward for the host who did the acquisition work. Net payout 1% after platform partner share.'],
+  ['Level 2', '2%', 'Their referral', 'Keeps upstream hosts engaged. Net payout 1% after platform partner share.'],
+  ['Level 3', '1%', 'Third level', 'Creates network effects while preserving marketplace margin. Net payout 0.5%.'],
 ];
 
 const rules = [

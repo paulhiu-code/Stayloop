@@ -15,7 +15,12 @@
 
 import pg from 'pg';
 import Stripe from 'stripe';
-import { calculateFeesFromTaxable, centsToDollars, REFERRAL_LEVEL_RATES } from '../server/fees.js';
+import {
+  calculateFeesFromTaxable,
+  centsToDollars,
+  REFERRAL_DISPLAY_RATES,
+  REFERRAL_PAYOUT_RATES,
+} from '../server/fees.js';
 import { finalizeBookingPayment } from '../server/revShare.js';
 
 const { Pool } = pg;
@@ -55,11 +60,15 @@ function assert(condition, label, detail) {
 
 function feeScenario(label, taxable, upstreamLevels) {
   const fees = calculateFeesFromTaxable(taxable, 0, upstreamLevels);
-  const expectedReferrerPool = REFERRAL_LEVEL_RATES.slice(0, upstreamLevels).reduce(
+  const expectedDisplayPool = REFERRAL_DISPLAY_RATES.slice(0, upstreamLevels).reduce(
     (sum, rate) => sum + taxable * rate,
     0
   );
-  const expectedPlatformFromHostPool = taxable * 0.1 - expectedReferrerPool;
+  const expectedPayoutPool = REFERRAL_PAYOUT_RATES.slice(0, upstreamLevels).reduce(
+    (sum, rate) => sum + taxable * rate,
+    0
+  );
+  const expectedPlatformFromHostPool = taxable * 0.1 - expectedPayoutPool;
   const expectedHostPayout = taxable * 0.9;
   const expectedGuestFee = taxable * 0.05;
   const expectedTotal = taxable + expectedGuestFee;
@@ -68,21 +77,25 @@ function feeScenario(label, taxable, upstreamLevels) {
   console.log(`\n${label} (taxable $${taxable}, ${upstreamLevels} upstream level(s))`);
   assert(Math.abs(centsToDollars(fees.hostPayoutCents) - expectedHostPayout) < 0.02, 'Listing host gets 90% of taxable');
   assert(
-    Math.abs(centsToDollars(fees.referralPoolCents) - expectedReferrerPool) < 0.02,
-    `Referrer pool is ${upstreamLevels > 0 ? '3/2/1% slices' : '$0'}`
+    Math.abs(centsToDollars(fees.referralDisplayPoolCents) - expectedDisplayPool) < 0.02,
+    `Nominal referrer pool is ${upstreamLevels > 0 ? '2/2/1% display slices' : '$0'}`
+  );
+  assert(
+    Math.abs(centsToDollars(fees.referralPayoutPoolCents) - expectedPayoutPool) < 0.02,
+    `Net referrer payout pool is ${upstreamLevels > 0 ? '1/1/0.5% after partner share' : '$0'}`
   );
   assert(
     Math.abs(centsToDollars(fees.applicationFeeCents) - expectedApplicationFee) < 0.02,
-    'Platform application_fee = guest fee + unreferred host-fee pool'
+    'Platform application_fee = guest fee + full host-fee pool'
   );
   assert(
-    Math.abs(expectedPlatformFromHostPool - taxable * 0.04) < 0.02 || upstreamLevels < 3,
+    Math.abs(centsToDollars(fees.platformHostPoolKeepCents) - expectedPlatformFromHostPool) < 0.02,
     upstreamLevels === 3
-      ? 'At 3 levels platform keeps 4% of taxable from host pool'
-      : `StayLoop keeps unused host-pool share ($${expectedPlatformFromHostPool.toFixed(2)})`
+      ? 'At 3 levels StayLoop keeps 7.5% of taxable from host pool after net payouts'
+      : `StayLoop keeps host-pool remainder ($${expectedPlatformFromHostPool.toFixed(2)})`
   );
   console.log(
-    `    guest pays $${centsToDollars(fees.totalCents)} | host $${centsToDollars(fees.hostPayoutCents)} | platform fee $${centsToDollars(fees.applicationFeeCents)} | referrer pool $${centsToDollars(fees.referralPoolCents)}`
+    `    guest pays $${centsToDollars(fees.totalCents)} | host $${centsToDollars(fees.hostPayoutCents)} | platform fee $${centsToDollars(fees.applicationFeeCents)} | display pool $${centsToDollars(fees.referralDisplayPoolCents)} | net payout pool $${centsToDollars(fees.referralPayoutPoolCents)}`
   );
 }
 
@@ -96,6 +109,36 @@ async function pickHosts() {
   );
   if (rows.length < 3) throw new Error('Need at least 3 host profiles in the database');
   return rows;
+}
+
+/**
+ * Seed a profile's Stripe Connect onboarding state for test fixtures.
+ *
+ * The `protect_profile_privileged_columns` trigger silently reverts writes to
+ * stripe_* columns unless `is_admin_user()` is true. Tests run over the
+ * privileged service connection (no auth.uid()), so briefly disable user
+ * triggers for just this fixture write, then restore normal behavior.
+ */
+async function seedProfileStripeState(
+  id,
+  { accountId, chargesEnabled = true, payoutsEnabled = true, onboardingComplete = true }
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('SET session_replication_role = replica');
+    await client.query(
+      `UPDATE profiles
+         SET stripe_account_id = $1,
+             stripe_charges_enabled = $2,
+             stripe_payouts_enabled = $3,
+             stripe_onboarding_complete = $4
+       WHERE id = $5`,
+      [accountId, chargesEnabled, payoutsEnabled, onboardingComplete, id]
+    );
+  } finally {
+    await client.query('SET session_replication_role = origin').catch(() => {});
+    client.release();
+  }
 }
 
 async function runDbTests() {
@@ -126,7 +169,7 @@ async function runDbTests() {
     await pool.query(`UPDATE bookings SET status = 'confirmed' WHERE id = $1`, [chainBooking.id]);
 
     const { rows: earnings } = await pool.query(
-      `SELECT referral_level, commission_amount, earner_id
+      `SELECT referral_level, commission_amount, payout_amount, commission_percentage, earner_id
        FROM referral_earnings
        WHERE booking_id = $1
        ORDER BY referral_level ASC`,
@@ -137,12 +180,16 @@ async function runDbTests() {
     if (earnings.length >= 1) {
       assert(Number(earnings[0].referral_level) === 1, 'Level 1 row present');
       assert(earnings[0].earner_id === hostB.id, 'Level 1 paid to direct referrer (B)');
-      assert(Math.abs(Number(earnings[0].commission_amount) - 30) < 0.01, 'Level 1 = 3% of $1000 taxable ($30)');
+      assert(Math.abs(Number(earnings[0].commission_percentage) - 2) < 0.01, 'Level 1 display rate = 2%');
+      assert(Math.abs(Number(earnings[0].commission_amount) - 20) < 0.01, 'Level 1 display = 2% of $1000 ($20)');
+      assert(Math.abs(Number(earnings[0].payout_amount) - 10) < 0.01, 'Level 1 payout = 1% of $1000 ($10)');
     }
     if (earnings.length >= 2) {
       assert(Number(earnings[1].referral_level) === 2, 'Level 2 row present');
       assert(earnings[1].earner_id === hostA.id, 'Level 2 paid to upstream referrer (A)');
-      assert(Math.abs(Number(earnings[1].commission_amount) - 20) < 0.01, 'Level 2 = 2% of $1000 taxable ($20)');
+      assert(Math.abs(Number(earnings[1].commission_percentage) - 2) < 0.01, 'Level 2 display rate = 2%');
+      assert(Math.abs(Number(earnings[1].commission_amount) - 20) < 0.01, 'Level 2 display = 2% of $1000 ($20)');
+      assert(Math.abs(Number(earnings[1].payout_amount) - 10) < 0.01, 'Level 2 payout = 1% of $1000 ($10)');
     }
 
     await cleanupBooking(chainBooking.id);
@@ -316,15 +363,20 @@ async function runStripeTest() {
 
   const hosts = await pickHosts();
   const listingHost = hosts.find((h) => h.email?.includes('playpark')) || hosts[0];
-  await pool.query(
-    `UPDATE profiles
-     SET stripe_account_id = $1,
-         stripe_charges_enabled = true,
-         stripe_payouts_enabled = $2,
-         stripe_onboarding_complete = true
-     WHERE id = $3`,
-    [hostAccountId, account.payouts_enabled, listingHost.id]
+
+  const { rows: savedHostRows } = await pool.query(
+    `SELECT stripe_account_id, stripe_charges_enabled, stripe_payouts_enabled, stripe_onboarding_complete
+     FROM profiles WHERE id = $1`,
+    [listingHost.id]
   );
+  const savedHost = savedHostRows[0] || {};
+
+  await seedProfileStripeState(listingHost.id, {
+    accountId: hostAccountId,
+    chargesEnabled: true,
+    payoutsEnabled: account.payouts_enabled,
+    onboardingComplete: true,
+  });
 
   const { rows: props } = await pool.query(
     `SELECT id FROM properties WHERE host_id = $1 LIMIT 1`,
@@ -332,6 +384,12 @@ async function runStripeTest() {
   );
   if (!props[0]) {
     fail('Test property', 'No property for listing host');
+    await seedProfileStripeState(listingHost.id, {
+      accountId: savedHost.stripe_account_id ?? null,
+      chargesEnabled: savedHost.stripe_charges_enabled ?? false,
+      payoutsEnabled: savedHost.stripe_payouts_enabled ?? false,
+      onboardingComplete: savedHost.stripe_onboarding_complete ?? false,
+    });
     return;
   }
 
@@ -373,12 +431,21 @@ async function runStripeTest() {
     ]
   );
 
-  const result = await finalizeBookingPayment(paymentIntent.id);
-  assert(Boolean(result.bookingId), 'finalizeBookingPayment confirmed booking');
-  assert(result.payouts.length === 0, 'No upstream referrers → zero Stripe referrer transfers');
-  console.log(`    Stripe PI ${paymentIntent.id} | booking ${result.bookingId} | platform fee ${fees.applicationFeeCents}¢ | host transfer ${fees.hostPayoutCents}¢`);
+  try {
+    const result = await finalizeBookingPayment(paymentIntent.id);
+    assert(Boolean(result.bookingId), 'finalizeBookingPayment confirmed booking');
+    assert(result.payouts.length === 0, 'No upstream referrers → zero Stripe referrer transfers');
+    console.log(`    Stripe PI ${paymentIntent.id} | booking ${result.bookingId} | platform fee ${fees.applicationFeeCents}¢ | host transfer ${fees.hostPayoutCents}¢`);
 
-  await cleanupBooking(rows[0].id);
+    await cleanupBooking(rows[0].id);
+  } finally {
+    await seedProfileStripeState(listingHost.id, {
+      accountId: savedHost.stripe_account_id ?? null,
+      chargesEnabled: savedHost.stripe_charges_enabled ?? false,
+      payoutsEnabled: savedHost.stripe_payouts_enabled ?? false,
+      onboardingComplete: savedHost.stripe_onboarding_complete ?? false,
+    });
+  }
 }
 
 async function runStripeReferralTest() {
@@ -396,10 +463,13 @@ async function runStripeReferralTest() {
     referred_by: h.referred_by,
     stripe_account_id: null,
     stripe_charges_enabled: null,
+    stripe_payouts_enabled: null,
+    stripe_onboarding_complete: null,
   }));
 
   const savedStripe = await pool.query(
-    `SELECT id, stripe_account_id, stripe_charges_enabled FROM profiles WHERE id = ANY($1::uuid[])`,
+    `SELECT id, stripe_account_id, stripe_charges_enabled, stripe_payouts_enabled, stripe_onboarding_complete
+     FROM profiles WHERE id = ANY($1::uuid[])`,
     [hosts.map((h) => h.id)]
   );
   for (const row of savedStripe.rows) {
@@ -407,6 +477,8 @@ async function runStripeReferralTest() {
     if (entry) {
       entry.stripe_account_id = row.stripe_account_id;
       entry.stripe_charges_enabled = row.stripe_charges_enabled;
+      entry.stripe_payouts_enabled = row.stripe_payouts_enabled;
+      entry.stripe_onboarding_complete = row.stripe_onboarding_complete;
     }
   }
 
@@ -427,12 +499,12 @@ async function runStripeReferralTest() {
       [hostB, acctB],
       [hostC, acctC],
     ]) {
-      await pool.query(
-        `UPDATE profiles
-         SET stripe_account_id = $1, stripe_charges_enabled = true, stripe_payouts_enabled = true, stripe_onboarding_complete = true
-         WHERE id = $2`,
-        [acct.id, host.id]
-      );
+      await seedProfileStripeState(host.id, {
+        accountId: acct.id,
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        onboardingComplete: true,
+      });
     }
 
     const paymentIntent = await createConfirmedTestPayment({
@@ -480,28 +552,32 @@ async function runStripeReferralTest() {
     assert(result.payouts.every((p) => p.status === 'paid'), 'Referrer transfers marked paid');
 
     const paid = await pool.query(
-      `SELECT referral_level, commission_amount, status, stripe_transfer_id
+      `SELECT referral_level, commission_amount, payout_amount, status, stripe_transfer_id
        FROM referral_earnings WHERE booking_id = $1 ORDER BY referral_level`,
       [result.bookingId]
     );
     assert(paid.rows.length === 2, 'Two referral_earnings rows in DB');
     assert(paid.rows.every((r) => r.stripe_transfer_id), 'stripe_transfer_id recorded on earnings');
+    assert(Math.abs(Number(paid.rows[0].payout_amount) - 10) < 0.01, 'Level 1 Stripe transfer uses net payout ($10)');
+    assert(Math.abs(Number(paid.rows[1].payout_amount) - 10) < 0.01, 'Level 2 Stripe transfer uses net payout ($10)');
 
     console.log(
-      `    PI ${paymentIntent.id} | L1 $${paid.rows[0].commission_amount} → ${acctB.id} | L2 $${paid.rows[1].commission_amount} → ${acctA.id}`
+      `    PI ${paymentIntent.id} | L1 $${paid.rows[0].payout_amount} → ${acctB.id} | L2 $${paid.rows[1].payout_amount} → ${acctA.id}`
     );
 
     await cleanupBooking(rows[0].id);
   } finally {
     for (const row of saved) {
-      await pool.query(
-        `UPDATE profiles
-         SET referred_by = $1,
-             stripe_account_id = $2,
-             stripe_charges_enabled = COALESCE($3, false)
-         WHERE id = $4`,
-        [row.referred_by, row.stripe_account_id, row.stripe_charges_enabled, row.id]
-      );
+      await pool.query(`UPDATE profiles SET referred_by = $1 WHERE id = $2`, [
+        row.referred_by,
+        row.id,
+      ]);
+      await seedProfileStripeState(row.id, {
+        accountId: row.stripe_account_id,
+        chargesEnabled: row.stripe_charges_enabled ?? false,
+        payoutsEnabled: row.stripe_payouts_enabled ?? false,
+        onboardingComplete: row.stripe_onboarding_complete ?? false,
+      });
     }
   }
 }

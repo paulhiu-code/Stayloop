@@ -62,21 +62,26 @@ Expected: `status = 'confirmed'` after payment.
 
 ### 5. Rev-share (optional)
 
-Fee model (single source of truth: `server/fees.js`):
+Fee model (single source of truth: `server/fees.js`, `src/lib/fees.ts`):
 
 | Party | Share |
 |-------|-------|
 | Listing host | 90% of taxable (nights + cleaning) |
 | Guest service fee | 5% of taxable |
-| Host fee pool | 10% of taxable → 3% / 2% / 1% to upstream referrers, remainder to StayLoop |
+| Host fee pool | 10% of taxable |
+| Upstream referrers (display) | 2% / 2% / 1% of taxable at levels 1–3 |
+| Upstream referrers (net payout) | 1% / 1% / 0.5% after StayLoop partner share |
+| StayLoop partner share | 50% of each nominal upstream slice stays on platform |
 | No upstream referrers | StayLoop keeps full 10% host pool + 5% guest fee |
+
+Example on $1,000 taxable with a full 3-level chain: host $900, net referrer payouts $25 (2.5%), StayLoop keeps $75 from the host pool (7.5%) plus the $50 guest fee.
 
 To test referral accrual:
 
 1. Host A shares invite link (`/hosts?ref=CODE`)
 2. Host B signs up via link, completes Stripe onboarding
 3. Host B lists a property; guest books it
-4. Check `referral_earnings` for level-1 row (3% of taxable)
+4. Check `referral_earnings`: `commission_percentage` = 2, `commission_amount` = $20 display, `payout_amount` = $10 net
 
 Referrers need Stripe Connect for **paid** transfers; otherwise earnings stay `pending`.
 
@@ -88,7 +93,9 @@ Referrers need Stripe Connect for **paid** transfers; otherwise earnings stay `p
 | API 401 on checkout | Guest must be signed in |
 | Booking stays `pending` after payment | Check webhook secret + Stripe webhook delivery logs |
 | Reserve blocked — host Stripe | Host must finish Connect onboarding |
-| Wrong commission amounts | Ensure migration `20260606120000_revshare_fixes.sql` is applied |
+| Wrong commission amounts | Ensure migration `20260704030000_raveshare_partner_split.sql` is applied |
+| `--stripe` referral transfers stay `pending` | The `protect_profile_privileged_columns` trigger reverts `stripe_*` writes for non-admin roles; `test-revshare.mjs` seeds fixture Stripe state with `session_replication_role = replica`, so run it with a DB role allowed to set that (Supabase `postgres`) |
+| Login fails with `Legacy API keys are disabled` | Use the project's **publishable** key (`sb_publishable_…`) for `VITE_SUPABASE_ANON_KEY`, not the legacy JWT `anon` key |
 
 ## Key files
 

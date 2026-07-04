@@ -15,6 +15,7 @@ export async function distributeReferralPayouts(bookingId, paymentIntentId) {
        re.id,
        re.referral_level,
        re.commission_amount,
+       re.payout_amount,
        re.status,
        p.stripe_account_id,
        p.stripe_charges_enabled,
@@ -31,7 +32,8 @@ export async function distributeReferralPayouts(bookingId, paymentIntentId) {
   const results = [];
 
   for (const earning of earnings) {
-    const amountCents = Math.round(Number(earning.commission_amount) * 100);
+    const payoutAmount = earning.payout_amount ?? earning.commission_amount;
+    const amountCents = Math.round(Number(payoutAmount) * 100);
     if (amountCents <= 0) {
       continue;
     }
