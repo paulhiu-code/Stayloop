@@ -11,8 +11,10 @@ import {
   ToggleLeft,
   ToggleRight,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Code2, PenLine } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import EmailVisualEditor, { EmailVisualEditorHandle } from './EmailVisualEditor';
 import {
   buildSampleVariables,
   EMAIL_CATEGORIES,
@@ -55,6 +57,8 @@ export default function EmailCmsDashboard({
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [showPreview, setShowPreview] = useState(true);
+  const [editorMode, setEditorMode] = useState<'visual' | 'html'>('visual');
+  const visualEditorRef = useRef<EmailVisualEditorHandle | null>(null);
 
   const selectedTrigger = triggers.find((trigger) => trigger.id === selectedTriggerId) ?? null;
   const selectedTemplate = selectedTrigger ? getTemplateForTrigger(selectedTrigger) : null;
@@ -216,7 +220,11 @@ export default function EmailCmsDashboard({
 
   function insertVariable(key: string) {
     const token = `{{${key}}}`;
-    setHtmlBody((current) => `${current}${current.endsWith('>') || current.length === 0 ? '' : ' '}${token}`);
+    if (editorMode === 'visual' && visualEditorRef.current) {
+      visualEditorRef.current.insertToken(token);
+    } else {
+      setHtmlBody((current) => `${current}${current.endsWith('>') || current.length === 0 ? '' : ' '}${token}`);
+    }
     setTextBody((current) => `${current}${current.length === 0 ? '' : ' '}${token}`);
   }
 
@@ -403,15 +411,53 @@ export default function EmailCmsDashboard({
                         className="mt-2 w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm outline-none ring-orange-400 focus:ring-2"
                       />
                     </label>
-                    <label className="block">
-                      <span className="text-sm font-semibold text-slate-200">HTML body</span>
-                      <textarea
-                        value={htmlBody}
-                        onChange={(event) => setHtmlBody(event.target.value)}
-                        rows={18}
-                        className="mt-2 w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 font-mono text-xs leading-6 outline-none ring-orange-400 focus:ring-2"
-                      />
-                    </label>
+                    <div className="block">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-semibold text-slate-200">Email body</span>
+                        <div className="inline-flex rounded-lg border border-white/10 bg-slate-900 p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditorMode('visual')}
+                            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                              editorMode === 'visual' ? 'bg-orange-500 text-white' : 'text-slate-300 hover:text-white'
+                            }`}
+                          >
+                            <PenLine className="h-3.5 w-3.5" />
+                            Visual
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditorMode('html')}
+                            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                              editorMode === 'html' ? 'bg-orange-500 text-white' : 'text-slate-300 hover:text-white'
+                            }`}
+                          >
+                            <Code2 className="h-3.5 w-3.5" />
+                            HTML
+                          </button>
+                        </div>
+                      </div>
+                      {editorMode === 'visual' ? (
+                        <div className="mt-2">
+                          <EmailVisualEditor
+                            ref={visualEditorRef}
+                            html={htmlBody}
+                            onChange={setHtmlBody}
+                            docKey={`${selectedTemplate.id}:${editorMode}`}
+                          />
+                          <p className="mt-2 text-xs text-slate-500">
+                            Format text with the toolbar and click a variable to insert it at the cursor. Switch to HTML for raw markup.
+                          </p>
+                        </div>
+                      ) : (
+                        <textarea
+                          value={htmlBody}
+                          onChange={(event) => setHtmlBody(event.target.value)}
+                          rows={18}
+                          className="mt-2 w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 font-mono text-xs leading-6 outline-none ring-orange-400 focus:ring-2"
+                        />
+                      )}
+                    </div>
                     <label className="block">
                       <span className="text-sm font-semibold text-slate-200">Plain text fallback</span>
                       <textarea
