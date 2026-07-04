@@ -5,9 +5,17 @@ import { processBookingLifecycleEmails } from '../server/booking-emails.js';
 
 const { Pool } = pg;
 
+const isServerless = Boolean(process.env.VERCEL || process.env.NODE_ENV === 'production');
+const sslCa = process.env.DATABASE_SSL_CA?.replace(/\\n/g, '\n');
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : undefined,
+  ssl: isServerless
+    ? {
+        rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false',
+        ...(sslCa ? { ca: sslCa } : {}),
+      }
+    : undefined,
 });
 
 const router = express.Router();

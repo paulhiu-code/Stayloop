@@ -1,17 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { buildSampleVariables, renderTemplateString, type TemplateVariables } from '../_shared/email-template.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
 import {
-  getEmailFromAddress,
-  getEmailReplyToAddress,
   isResendConfigured,
   sendEmailViaResend,
 } from '../_shared/resend.ts';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
-};
 
 type SendEmailRequest = {
   action?: 'health' | 'test' | 'preview' | 'send';
@@ -23,7 +16,11 @@ type SendEmailRequest = {
   variables?: TemplateVariables;
 };
 
-function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+function jsonResponse(
+  body: Record<string, unknown>,
+  corsHeaders: Record<string, string>,
+  status = 200
+): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -135,24 +132,29 @@ async function logDelivery(
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   if (req.method === 'GET') {
     if (!(await isAdminRequest(req))) {
-      return jsonResponse({ error: 'Unauthorized.' }, 401);
+      return jsonResponse({ error: 'Unauthorized.' }, corsHeaders, 401);
     }
 
-    return jsonResponse({
-      ok: true,
-      configured: isResendConfigured(),
-      provider: 'resend',
-    });
+    return jsonResponse(
+      {
+        ok: true,
+        configured: isResendConfigured(),
+        provider: 'resend',
+      },
+      corsHeaders
+    );
   }
 
   if (req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed.' }, 405);
+    return jsonResponse({ error: 'Method not allowed.' }, corsHeaders, 405);
   }
 
   let body: SendEmailRequest = {};
@@ -166,28 +168,29 @@ Deno.serve(async (req: Request) => {
   const authorized = await isAdminRequest(req);
 
   if (action === 'health') {
-    return jsonResponse({
-      ok: isResendConfigured(),
-      configured: isResendConfigured(),
-      from: getEmailFromAddress(),
-      replyTo: getEmailReplyToAddress() ?? null,
-      provider: 'resend',
-    });
+    return jsonResponse(
+      {
+        ok: isResendConfigured(),
+        configured: isResendConfigured(),
+        provider: 'resend',
+      },
+      corsHeaders
+    );
   }
 
   if ((action === 'preview' || action === 'send') && !authorized) {
-    return jsonResponse({ error: 'Unauthorized.' }, 401);
+    return jsonResponse({ error: 'Unauthorized.' }, corsHeaders, 401);
   }
 
   if (action !== 'test' && action !== 'preview' && action !== 'send' && !isServiceRoleRequest(req)) {
-    return jsonResponse({ error: 'Unauthorized.' }, 401);
+    return jsonResponse({ error: 'Unauthorized.' }, corsHeaders, 401);
   }
 
   const supabase = createServiceClient();
 
   if (action === 'preview') {
     const triggerSlug = body.trigger?.trim();
-    if (!triggerSlug) return jsonResponse({ error: 'Missing trigger slug.' }, 400);
+    if (!triggerSlug) return jsonResponse({ error: 'Missing trigger slug.' }, corsHeaders, 400);
 
     try {
       const { trigger, template } = await loadTriggerTemplate(supabase, triggerSlug);
@@ -199,28 +202,31 @@ Deno.serve(async (req: Request) => {
       const html = renderTemplateString(body.html ?? template.html_body, variables);
       const text = renderTemplateString(body.text ?? template.text_body, variables);
 
-      return jsonResponse({
-        ok: true,
-        trigger: trigger.slug,
-        subject,
-        html,
-        text,
-        variables,
-      });
+      return jsonResponse(
+        {
+          ok: true,
+          trigger: trigger.slug,
+          subject,
+          html,
+          text,
+          variables,
+        },
+        corsHeaders
+      );
     } catch (error) {
-      return jsonResponse({ error: error instanceof Error ? error.message : 'Preview failed.' }, 400);
+      return jsonResponse({ error: error instanceof Error ? error.message : 'Preview failed.' }, corsHeaders, 400);
     }
   }
 
   if (action === 'send') {
     if (!isResendConfigured()) {
-      return jsonResponse({ error: 'Resend is not configured.' }, 503);
+      return jsonResponse({ error: 'Resend is not configured.' }, corsHeaders, 503);
     }
 
     const triggerSlug = body.trigger?.trim();
     const to = body.to?.trim();
-    if (!triggerSlug) return jsonResponse({ error: 'Missing trigger slug.' }, 400);
-    if (!to) return jsonResponse({ error: 'Missing recipient email.' }, 400);
+    if (!triggerSlug) return jsonResponse({ error: 'Missing trigger slug.' }, corsHeaders, 400);
+    if (!to) return jsonResponse({ error: 'Missing recipient email.' }, corsHeaders, 400);
 
     try {
       const { trigger, template } = await loadTriggerTemplate(supabase, triggerSlug);
@@ -256,30 +262,32 @@ Deno.serve(async (req: Request) => {
         },
       });
 
-      return jsonResponse({
-        ok: true,
-        messageId: result.id,
-        trigger: trigger.slug,
-        to,
-        subject,
-        from: getEmailFromAddress(),
-      });
+      return jsonResponse(
+        {
+          ok: true,
+          messageId: result.id,
+          trigger: trigger.slug,
+          to,
+          subject,
+        },
+        corsHeaders
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to send email.';
-      return jsonResponse({ error: message }, 502);
+      return jsonResponse({ error: message }, corsHeaders, 502);
     }
   }
 
   if (!isServiceRoleRequest(req) && !authorized) {
-    return jsonResponse({ error: 'Unauthorized.' }, 401);
+    return jsonResponse({ error: 'Unauthorized.' }, corsHeaders, 401);
   }
 
   if (!isResendConfigured()) {
-    return jsonResponse({ error: 'Resend is not configured.' }, 503);
+    return jsonResponse({ error: 'Resend is not configured.' }, corsHeaders, 503);
   }
 
   const to = body.to?.trim();
-  if (!to) return jsonResponse({ error: 'Missing "to" email address.' }, 400);
+  if (!to) return jsonResponse({ error: 'Missing "to" email address.' }, corsHeaders, 400);
 
   const subject = body.subject?.trim() || 'StayLoop email connection test';
   const html =
@@ -296,14 +304,16 @@ Deno.serve(async (req: Request) => {
       tags: [{ name: 'category', value: 'connection_test' }],
     });
 
-    return jsonResponse({
-      ok: true,
-      messageId: result.id,
-      to,
-      from: getEmailFromAddress(),
-    });
+    return jsonResponse(
+      {
+        ok: true,
+        messageId: result.id,
+        to,
+      },
+      corsHeaders
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to send email.';
-    return jsonResponse({ error: message }, 502);
+    return jsonResponse({ error: message }, corsHeaders, 502);
   }
 });
