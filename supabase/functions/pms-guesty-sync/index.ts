@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
+import { getGuestyToken, type PMSConnectionRow } from '../_shared/pms-auth.ts';
 
 interface GuestyListing {
   _id: string;
@@ -111,7 +112,9 @@ Deno.serve(async (req: Request) => {
       throw new Error('PMS connection not found');
     }
 
-    const guestyToken = connection.oauth_access_token;
+    // Mint/refresh a token from client credentials (falls back to a directly
+    // stored token for legacy manual connections).
+    const guestyToken = await getGuestyToken(supabase, connection as PMSConnectionRow);
     const baseUrl = 'https://open-api.guesty.com/v1';
 
     // Create sync log
@@ -172,7 +175,7 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     console.error('Guesty sync error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
