@@ -1,4 +1,4 @@
-import { confirmBookingByPaymentIntent } from '../booking-emails.js';
+import { confirmBookingByPaymentIntent, sendBookingCancelledEmails } from '../booking-emails.js';
 import { finalizeBookingPayment } from '../revShare.js';
 import { getPool } from '../lib/db.js';
 import { getStripe } from '../lib/stripe.js';
@@ -34,14 +34,22 @@ export async function handleStripeWebhookEvent(rawBody, signature) {
     case 'payment_intent.payment_failed':
     case 'payment_intent.canceled': {
       const paymentIntent = event.data.object;
-      await pool.query(
+      const { rows } = await pool.query(
         `UPDATE bookings
          SET status = 'cancelled',
              updated_at = now()
          WHERE stripe_payment_intent_id = $1
-           AND status = 'pending'`,
+           AND status = 'pending'
+         RETURNING id`,
         [paymentIntent.id]
       );
+      if (rows[0]) {
+        try {
+          await sendBookingCancelledEmails(pool, rows[0].id);
+        } catch (err) {
+          console.error('Failed to send booking cancellation emails:', err);
+        }
+      }
       break;
     }
 
