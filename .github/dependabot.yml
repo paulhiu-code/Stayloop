@@ -1,0 +1,32 @@
+version: 2
+updates:
+  # npm dependencies — security-first, low-noise for an MVP.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      # Batch low-risk updates into a single PR to reduce review load.
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      production-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+    # Major bumps still open individually so they get deliberate review.
+
+  # Keep the CI actions themselves current (supply-chain hygiene).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - github-actions
