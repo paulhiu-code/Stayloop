@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  CreditCard,
   Loader2,
   Minus,
   Plane,
@@ -15,6 +16,7 @@ import {
   PROPERTY_TYPE_OPTIONS,
   blankDraft,
   getListing,
+  hasPayoutsEnabled,
   listingCompleteness,
   propertyToDraft,
   publishListing,
@@ -23,12 +25,14 @@ import {
   type PlaceTypeValue,
   type PropertyTypeValue,
 } from '../../lib/listing';
+import { useAuth } from '../../contexts/AuthContext';
 import { PhotoUploader } from './PhotoUploader';
 
 export type ListingWizardProps = {
   listingId?: string;
   onExit: () => void;
   onPublished: (propertyId: string) => void;
+  onSetupPayouts: () => void;
 };
 
 const PHASES = [
@@ -149,7 +153,9 @@ function FieldLabel({ htmlFor, children }: FieldLabelProps) {
 const inputClassName =
   'w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-orange-300 focus:ring-2 focus:ring-orange-100';
 
-export default function ListingWizard({ listingId, onExit, onPublished }: ListingWizardProps) {
+export default function ListingWizard({ listingId, onExit, onPublished, onSetupPayouts }: ListingWizardProps) {
+  const { profile } = useAuth();
+  const payoutsReady = hasPayoutsEnabled(profile);
   const [draft, setDraft] = useState<ListingDraft>(blankDraft);
   const [stepIndex, setStepIndex] = useState(0);
   const [loading, setLoading] = useState(Boolean(listingId));
@@ -227,6 +233,21 @@ export default function ListingWizard({ listingId, onExit, onPublished }: Listin
       setPublishing(false);
     }
   }, [draft, onPublished]);
+
+  // Save the listing as a draft first (so nothing is lost), then send the host to Stripe payout setup.
+  const handleSaveDraftAndSetupPayouts = useCallback(async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const saved = await saveListing({ ...draft, is_active: false });
+      setDraft((current) => ({ ...current, id: saved.id }));
+      onSetupPayouts();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Unable to save listing.');
+    } finally {
+      setSaving(false);
+    }
+  }, [draft, onSetupPayouts]);
 
   const goNext = useCallback(() => {
     const error = validateStep(stepIndex, draft);
@@ -680,21 +701,69 @@ export default function ListingWizard({ listingId, onExit, onPublished }: Listin
               </p>
             )}
 
-            <button
-              type="button"
-              onClick={() => void handlePublish()}
-              disabled={!completeness.readyToPublish || publishing}
-              className="w-full rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-6 py-4 text-base font-bold text-white shadow-lg transition hover:from-orange-600 hover:to-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {publishing ? (
-                <span className="inline-flex items-center justify-center gap-2">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Publishing…
-                </span>
-              ) : (
-                'Publish listing'
-              )}
-            </button>
+            {/* Payouts gate: a listing can be saved as a draft, but cannot go live until Stripe is connected. */}
+            {completeness.readyToPublish && !payoutsReady ? (
+              <div className="rounded-3xl border border-orange-200 bg-orange-50/70 p-6">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-orange-600 shadow-sm">
+                    <CreditCard className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-extrabold text-gray-900">One last step to go live</h4>
+                    <p className="mt-1 text-sm leading-6 text-gray-600">
+                      Your listing is complete. Connect a Stripe payout account to accept payments and go
+                      live. Already use Stripe? You can connect your existing account, or create a new one.
+                      Prefer to finish later? Save it as a draft — it won&apos;t be visible to guests until
+                      payouts are connected.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveDraftAndSetupPayouts()}
+                    disabled={saving}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-6 py-3.5 text-base font-bold text-white shadow-lg transition hover:from-orange-600 hover:to-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Saving…
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="h-5 w-5" />
+                        Set up payouts with Stripe
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveAndExit()}
+                    disabled={saving}
+                    className="inline-flex flex-1 items-center justify-center rounded-2xl border border-gray-300 bg-white px-6 py-3.5 text-base font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Save as draft
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handlePublish()}
+                disabled={!completeness.readyToPublish || publishing}
+                className="w-full rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-6 py-4 text-base font-bold text-white shadow-lg transition hover:from-orange-600 hover:to-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {publishing ? (
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Publishing…
+                  </span>
+                ) : (
+                  'Publish listing'
+                )}
+              </button>
+            )}
           </div>
         )}
 

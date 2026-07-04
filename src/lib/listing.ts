@@ -1,7 +1,19 @@
 import type { LucideIcon } from 'lucide-react';
 import { Building, Building2, Castle, Home, Sofa, Sparkles, Trees, TreePine, Warehouse } from 'lucide-react';
-import { supabase, type Property } from './supabase';
+import { supabase, type Profile, type Property } from './supabase';
 import { normalizeAmenities } from './property';
+
+/**
+ * Whether a host's Stripe payout account is connected and fully enabled. A listing may be built and
+ * saved as a draft without this, but it cannot go live (accept bookings) until this is true.
+ */
+export function hasPayoutsEnabled(profile: Profile | null | undefined): boolean {
+  if (!profile) return false;
+  return Boolean(
+    profile.stripe_onboarding_complete ||
+      (profile.stripe_charges_enabled && profile.stripe_payouts_enabled),
+  );
+}
 
 /**
  * Host listing data layer.

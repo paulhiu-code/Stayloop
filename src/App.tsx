@@ -349,6 +349,7 @@ function AppContent() {
         listingId={page === 'host-edit' ? listingId ?? undefined : undefined}
         onExit={() => navigate('become-host')}
         onPublished={() => navigate('become-host')}
+        onSetupPayouts={() => navigate('host-onboarding')}
       />
     );
   }
@@ -461,6 +462,10 @@ function AppContent() {
         onBecomeHost={() => {
           setShowDashboard(false);
           navigate('become-host');
+        }}
+        onSetupPayouts={() => {
+          setShowDashboard(false);
+          navigate('host-onboarding');
         }}
       />
     );

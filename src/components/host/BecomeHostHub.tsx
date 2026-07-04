@@ -12,7 +12,7 @@ import {
   User,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getHostListings } from '../../lib/listing';
+import { getHostListings, hasPayoutsEnabled } from '../../lib/listing';
 import type { Property } from '../../lib/supabase';
 import Header, { type SitePage } from '../Header';
 
@@ -41,7 +41,7 @@ export default function BecomeHostHub({
   onSetupPayouts,
   onViewDashboard,
 }: BecomeHostHubProps) {
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const [listings, setListings] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -52,6 +52,9 @@ export default function BecomeHostHub({
     async function load() {
       setLoading(true);
       setLoadError('');
+
+      // Keep Stripe payout flags fresh so the checklist reflects the latest status.
+      void refreshProfile();
 
       try {
         const data = await getHostListings();
@@ -75,10 +78,10 @@ export default function BecomeHostHub({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshProfile]);
 
   const hasListings = listings.length > 0;
-  const payoutsDone = Boolean(profile?.stripe_payouts_enabled || profile?.stripe_onboarding_complete);
+  const payoutsDone = hasPayoutsEnabled(profile);
   const hasLiveListing = listings.some((listing) => listing.is_active);
   const firstDraft = listings.find((listing) => !listing.is_active);
 

@@ -74,7 +74,8 @@ export default function HostOnboarding({ onClose }: { onClose: () => void }) {
           <p className="mt-4 leading-7 text-gray-600">
             StayLoop uses <span className="font-semibold text-gray-900">Stripe</span> to send your earnings
             securely. You&apos;ll verify your identity and connect a bank account on Stripe&apos;s site — it only
-            takes a few minutes.
+            takes a few minutes. Already use Stripe? You can connect your existing account, or create a new
+            one.
           </p>
         </div>
 

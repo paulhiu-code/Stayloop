@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { apiRequest } from '../lib/api';
 import { supabase, Profile } from '../lib/supabase';
@@ -22,6 +22,7 @@ type AuthContextType = {
   updatePassword: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserType: (userType: UserType) => Promise<void>;
+  refreshProfile: () => Promise<void>;
 };
 
 function authRedirectUrl(path: string): string {
@@ -65,26 +66,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
+    // Runs once on mount to wire up the auth session listener.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function loadProfile(userId: string): Promise<Profile | null> {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    setProfile(data);
+    return data;
+  }
 
   async function fetchProfile(userId: string) {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      setProfile(data);
-      requestWelcomeEmail();
+      const data = await loadProfile(userId);
+      if (data) requestWelcomeEmail();
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
       setLoading(false);
     }
   }
+
+  // Re-fetch the profile without side effects (used after returning from Stripe onboarding
+  // so stripe_* flags reflect the latest account status). Stable identity for safe use in effects.
+  const refreshProfile = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) throw error;
+      setProfile(data);
+    } catch (error) {
+      console.error('Error refreshing profile:', error);
+    }
+  }, [user]);
 
   async function signUp(email: string, password: string, fullName: string, userType: UserType, referralCode?: string): Promise<SignUpResult> {
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -197,6 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updatePassword,
       signOut,
       updateUserType,
+      refreshProfile,
     }}>
       {children}
     </AuthContext.Provider>

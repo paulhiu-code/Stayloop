@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
-import { publishListing, unpublishListing } from '../lib/listing';
+import { hasPayoutsEnabled, publishListing, unpublishListing } from '../lib/listing';
 import EmailCmsDashboard from './admin/EmailCmsDashboard';
 import PMSSettings from './PMSSettings';
 
@@ -27,9 +27,16 @@ type DashboardProps = {
   onCreateListing?: () => void;
   onEditListing?: (id: string) => void;
   onBecomeHost?: () => void;
+  onSetupPayouts?: () => void;
 };
 
-export default function Dashboard({ onClose, onCreateListing, onEditListing, onBecomeHost }: DashboardProps) {
+export default function Dashboard({
+  onClose,
+  onCreateListing,
+  onEditListing,
+  onBecomeHost,
+  onSetupPayouts,
+}: DashboardProps) {
   const { profile, updateUserType, isAdmin } = useAuth();
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [adminView, setAdminView] = useState<AdminView>('main');
@@ -101,6 +108,15 @@ export default function Dashboard({ onClose, onCreateListing, onEditListing, onB
   }
 
   async function toggleListingActive(property: Property) {
+    // A listing can only go live once the host has connected Stripe payouts.
+    if (!property.is_active && !hasPayoutsEnabled(profile)) {
+      const goToPayouts = confirm(
+        'Connect a Stripe payout account before this listing can go live so guests can pay you.\n\nSet up payouts now?',
+      );
+      if (goToPayouts && onSetupPayouts) onSetupPayouts();
+      return;
+    }
+
     setTogglingId(property.id);
     try {
       if (property.is_active) {
