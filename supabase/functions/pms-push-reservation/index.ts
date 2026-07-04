@@ -25,6 +25,12 @@ interface PushRequest {
   connectionId?: string;
 }
 
+// Hard safety guard: OwnerRez's App API cannot create channel bookings, so
+// outbound to OwnerRez is DISABLED until we hold Channel-API partner status.
+// This is independent of a connection's sync_direction — even a two-way OwnerRez
+// connection will never have anything written to it while this is false.
+const OWNERREZ_OUTBOUND_ENABLED = false;
+
 function getServiceRoleKey(): string | undefined {
   return (
     Deno.env.get('STAYLOOP_SUPABASE_SERVICE_ROLE_KEY') ||
@@ -262,6 +268,26 @@ async function pushToConnection(
 
   if (existing?.status === 'pushed') {
     return { connectionId: connection.id, status: 'already_pushed' };
+  }
+
+  // Never write to OwnerRez until Channel-API partner status is in place.
+  if (connection.pms_provider === 'ownerrez' && !OWNERREZ_OUTBOUND_ENABLED) {
+    const reason = 'OwnerRez outbound disabled pending Channel API partner status';
+    if (existing?.id) {
+      await supabase
+        .from('pms_reservation_mappings')
+        .update({ status: 'skipped', last_error: reason, updated_at: new Date().toISOString() })
+        .eq('id', existing.id);
+    } else {
+      await supabase.from('pms_reservation_mappings').insert({
+        booking_id: booking.id,
+        pms_connection_id: connection.id,
+        pms_property_mapping_id: mappingId,
+        status: 'skipped',
+        last_error: reason,
+      });
+    }
+    return { connectionId: connection.id, provider: 'ownerrez', status: 'skipped', reason };
   }
 
   const mappingRowId =
