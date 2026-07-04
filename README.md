@@ -35,6 +35,7 @@ npm run server               # optional local API → http://localhost:4000
 
 | Doc | Purpose |
 |-----|---------|
+| **[docs/KEY_ROTATION.md](./docs/KEY_ROTATION.md)** | **Start here** — rotate exposed credentials (one-time) |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Vercel + Supabase deploy checklist |
 | [docs/STRIPE_TESTING.md](./docs/STRIPE_TESTING.md) | Stripe Connect + rev-share test guide |
 | [AGENTS.md](./AGENTS.md) | Cloud Agent instructions |
