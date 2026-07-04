@@ -11,6 +11,7 @@ import {
   Network,
   ArrowRight,
   Mail,
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
@@ -281,38 +282,41 @@ export default function Dashboard({
             </div>
           ) : (
             <>
-          <div className="mb-8 bg-gradient-to-r from-orange-500 to-rose-500 rounded-2xl p-8 text-white shadow-xl">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold mb-2">Your Referral Code</h2>
-                <p className="text-white/90">Share this code and earn passive income</p>
-              </div>
-              <Users className="w-12 h-12 text-white/80" />
+          <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-extrabold text-gray-900">Hosting dashboard</h2>
+              <p className="mt-1 text-gray-600">Manage your listings, bookings, and payouts.</p>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex-1 bg-white/20 backdrop-blur-sm rounded-xl px-6 py-4">
-                <span className="text-3xl font-bold tracking-wider">{profile?.referral_code}</span>
-              </div>
-              <button
-                onClick={copyReferralCode}
-                className="px-6 py-4 bg-white text-orange-600 font-semibold rounded-xl hover:bg-orange-50 transition-all shadow-lg flex items-center gap-2"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-5 h-5" />
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-5 h-5" />
-                    Copy Code
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              onClick={() => onCreateListing?.()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 px-5 py-3 font-bold text-white shadow-md transition hover:from-orange-600 hover:to-rose-600"
+            >
+              <Home className="h-5 w-5" />
+              {properties.length === 0 ? 'List your first property' : 'Add a property'}
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <Home className="w-6 h-6 text-purple-600" />
+                </div>
+              </div>
+              <div className="text-3xl font-bold text-gray-900 mb-1">{stats.activeProperties}</div>
+              <div className="text-sm text-gray-500">Active Properties</div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <Calendar className="w-6 h-6 text-blue-600" />
+                </div>
+              </div>
+              <div className="text-3xl font-bold text-gray-900 mb-1">{stats.totalBookings}</div>
+              <div className="text-sm text-gray-500">Total Bookings</div>
+            </div>
+
             <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -328,33 +332,11 @@ export default function Dashboard({
             <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-orange-600" />
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">
-                ${stats.pendingEarnings.toFixed(2)}
-              </div>
-              <div className="text-sm text-gray-500">Pending Earnings</div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <Users className="w-6 h-6 text-blue-600" />
+                  <Users className="w-6 h-6 text-orange-600" />
                 </div>
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-1">{stats.totalReferrals}</div>
               <div className="text-sm text-gray-500">Direct Referrals</div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <Home className="w-6 h-6 text-purple-600" />
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">{stats.activeProperties}</div>
-              <div className="text-sm text-gray-500">Active Properties</div>
             </div>
           </div>
 
@@ -384,6 +366,71 @@ export default function Dashboard({
             <div className="p-6">
               {activeTab === 'overview' && (
                 <div className="space-y-6">
+                  {properties.length === 0 ? (
+                    <div className="rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-6 sm:p-8">
+                      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-600">
+                            Welcome to hosting
+                          </p>
+                          <h3 className="mt-2 text-2xl font-extrabold text-gray-900">
+                            List your first property{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}
+                          </h3>
+                          <p className="mt-2 max-w-xl leading-7 text-gray-600">
+                            Add photos, details, and pricing in a few quick steps. Save a draft anytime and
+                            publish once your payouts are connected.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => onCreateListing?.()}
+                          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-7 py-4 font-bold text-white shadow-lg transition hover:shadow-xl"
+                        >
+                          Start your listing
+                          <ArrowRight className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 p-6 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h3 className="text-lg font-extrabold text-gray-900">Your hosting overview</h3>
+                        <p className="mt-1 text-gray-600">
+                          You have {properties.length} listing{properties.length === 1 ? '' : 's'} ·{' '}
+                          {stats.activeProperties} live.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => onCreateListing?.()}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-3 font-bold text-gray-800 transition hover:bg-gray-50"
+                      >
+                        <Home className="h-5 w-5" />
+                        Add another listing
+                      </button>
+                    </div>
+                  )}
+
+                  {!hasPayoutsEnabled(profile) && (
+                    <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 p-6 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                          <CreditCard className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900">Set up payouts</p>
+                          <p className="mt-1 text-sm leading-6 text-gray-600">
+                            Connect Stripe to accept payments and take your listings live.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onSetupPayouts?.()}
+                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-3 font-bold text-white transition hover:bg-gray-800"
+                      >
+                        Set up payouts
+                      </button>
+                    </div>
+                  )}
+
                   <div>
                     <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Activity</h3>
                     <div className="text-gray-500 text-center py-12">
@@ -524,6 +571,30 @@ export default function Dashboard({
               {activeTab === 'referrals' && (
                 <div>
                   <h3 className="text-lg font-bold text-gray-900 mb-4">Referral Network</h3>
+                  <div className="mb-6 flex flex-col gap-3 rounded-xl border border-gray-200 p-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-500">Your referral code</p>
+                      <p className="text-2xl font-extrabold tracking-wider text-gray-900">
+                        {profile?.referral_code}
+                      </p>
+                    </div>
+                    <button
+                      onClick={copyReferralCode}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 font-bold text-gray-700 transition hover:bg-gray-50"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="h-4 w-4" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4" />
+                          Copy code
+                        </>
+                      )}
+                    </button>
+                  </div>
                   <div className="bg-gradient-to-br from-orange-50 to-rose-50 rounded-xl p-6 mb-6">
                     <div className="flex items-center justify-between mb-4">
                       <div>
