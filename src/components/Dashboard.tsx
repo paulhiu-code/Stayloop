@@ -13,6 +13,7 @@ import {
   Mail,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { REFERRAL_LEVEL_LABELS } from '../lib/fees';
 import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
 import EmailCmsDashboard from './admin/EmailCmsDashboard';
 import PMSSettings from './PMSSettings';
@@ -61,8 +62,12 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
     if (propertiesRes.data) setProperties(propertiesRes.data);
     if (bookingsRes.data) setBookings(bookingsRes.data);
 
-    const totalEarnings = earningsRes.data?.reduce((sum, e) => sum + Number(e.commission_amount), 0) || 0;
-    const pendingEarnings = earningsRes.data?.filter((e) => e.status === 'pending').reduce((sum, e) => sum + Number(e.commission_amount), 0) || 0;
+    const totalEarnings =
+      earningsRes.data?.reduce((sum, e) => sum + Number(e.payout_amount ?? e.commission_amount), 0) || 0;
+    const pendingEarnings =
+      earningsRes.data
+        ?.filter((e) => e.status === 'pending')
+        .reduce((sum, e) => sum + Number(e.payout_amount ?? e.commission_amount), 0) || 0;
 
     setStats({
       totalEarnings,
@@ -443,22 +448,21 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <div className="text-sm text-gray-600 mb-1">Commission Structure</div>
-                        <div className="text-xs text-gray-500">Earn from 3 levels deep</div>
+                        <div className="text-xs text-gray-500">Earn from 3 levels deep · StayLoop partners on upstream share</div>
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between py-2">
-                        <span className="text-sm font-medium text-gray-700">Level 1 (Direct)</span>
-                        <span className="font-bold text-orange-600">3%</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2">
-                        <span className="text-sm font-medium text-gray-700">Level 2</span>
-                        <span className="font-bold text-orange-600">2%</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2">
-                        <span className="text-sm font-medium text-gray-700">Level 3</span>
-                        <span className="font-bold text-orange-600">1%</span>
-                      </div>
+                      {REFERRAL_LEVEL_LABELS.map((row) => (
+                        <div key={row.level} className="flex items-center justify-between py-2">
+                          <span className="text-sm font-medium text-gray-700">
+                            Level {row.level} {row.level === 1 ? '(Direct)' : ''}
+                          </span>
+                          <div className="text-right">
+                            <span className="font-bold text-orange-600">{row.displayRate}</span>
+                            <span className="ml-2 text-xs text-gray-500">({row.payoutRate} payout)</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -480,12 +484,12 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
                               Level {earning.referral_level} Commission
                             </div>
                             <div className="text-sm text-gray-500">
-                              {earning.commission_percentage}% · {earning.status}
+                              {earning.commission_percentage}% rate · {earning.status}
                             </div>
                           </div>
                           <div className="text-right">
                             <div className="text-lg font-bold text-green-600">
-                              +${earning.commission_amount}
+                              +${Number(earning.payout_amount ?? earning.commission_amount).toFixed(2)}
                             </div>
                             <div className="text-xs text-gray-500">
                               {new Date(earning.booking_date).toLocaleDateString()}

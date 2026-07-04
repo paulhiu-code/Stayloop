@@ -79,6 +79,7 @@ async function sendReferralCommissionEmails(pool, bookingId, variables) {
        re.id,
        re.referral_level,
        re.commission_amount,
+       re.payout_amount,
        earner.email AS earner_email,
        earner.full_name AS earner_name
      FROM referral_earnings re
@@ -96,7 +97,7 @@ async function sendReferralCommissionEmails(pool, bookingId, variables) {
       variables: {
         ...variables,
         host_name: earning.earner_name || 'Host',
-        referral_amount: formatCurrency(Number(earning.commission_amount || 0)),
+        referral_amount: formatCurrency(Number(earning.payout_amount ?? earning.commission_amount ?? 0)),
         referral_level: `Level ${earning.referral_level}`,
       },
     });

@@ -89,6 +89,7 @@ export type ReferralEarning = {
   referral_level: 1 | 2 | 3;
   commission_percentage: number;
   commission_amount: number;
+  payout_amount: number;
   booking_date: string;
   payout_date: string | null;
   status: 'pending' | 'paid';
