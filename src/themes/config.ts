@@ -15,8 +15,14 @@ export const THEMES: ThemeMeta[] = [
     description: 'Editorial warmth — terracotta, cream, and sage accents',
     swatch: 'linear-gradient(135deg, #b85c38 50%, #f5f0e8 50%)',
   },
+  {
+    id: 'classic',
+    label: 'Current',
+    description: 'The live StayLoop design — orange and rose, bright surfaces',
+    swatch: 'linear-gradient(135deg, #f97316 50%, #f43f5e 50%)',
+  },
 ];
 
 export function isThemeId(value: string | null | undefined): value is ThemeId {
-  return value === 'wander' || value === 'atlas';
+  return value === 'wander' || value === 'atlas' || value === 'classic';
 }

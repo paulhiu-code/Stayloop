@@ -19,6 +19,15 @@ const variations = [
     swatches: ['#b85c38', '#3d5a4c', '#f5f0e8'],
     accents: ['Terracotta + sage', 'Serif headlines', 'Rounded cards', 'Rich badges'],
   },
+  {
+    id: 'classic',
+    name: 'Current',
+    tagline: 'The live design',
+    description:
+      'The StayLoop look your guests see today — warm orange-to-rose gradients, bright cards, and the existing layout. Included as a side-by-side baseline for comparison.',
+    swatches: ['#f97316', '#f43f5e', '#f9fafb'],
+    accents: ['Orange + rose', 'Bright & vibrant', 'Current production', 'Familiar layout'],
+  },
 ] as const;
 
 type VariationsPageProps = {
@@ -51,7 +60,7 @@ export default function VariationsPage({ onEnterHome }: VariationsPageProps) {
           </p>
         </header>
 
-        <div className="mt-12 grid gap-8 lg:grid-cols-2">
+        <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
           {variations.map((v) => (
             <article key={v.id} className="card-surface overflow-hidden">
               <div

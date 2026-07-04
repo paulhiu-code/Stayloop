@@ -1,4 +1,4 @@
-export type ThemeId = 'wander' | 'atlas';
+export type ThemeId = 'wander' | 'atlas' | 'classic';
 
 export type ThemeMeta = {
   id: ThemeId;
