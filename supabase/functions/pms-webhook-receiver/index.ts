@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
+import { verifyProviderWebhook } from '../_shared/pms-webhook-verify.ts';
 
 function getServiceRoleKey(): string | undefined {
   return (
@@ -33,29 +34,6 @@ function resolveWebhookSecret(connection: Record<string, unknown>): string {
   }
 
   return '';
-}
-
-async function verifyWebhookSignature(
-  rawBody: string,
-  signatureHeader: string | null,
-  secret: string
-): Promise<boolean> {
-  if (!signatureHeader || !secret) return false;
-
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const digest = await crypto.subtle.sign('sha256', key, new TextEncoder().encode(rawBody));
-  const expected = Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-
-  const provided = signatureHeader.replace(/^sha256=/i, '').trim();
-  return provided === expected;
 }
 
 Deno.serve(async (req: Request) => {
@@ -100,15 +78,32 @@ Deno.serve(async (req: Request) => {
     }
 
     const webhookSecret = resolveWebhookSecret(connection as Record<string, unknown>);
-    const signature = req.headers.get('x-stayloop-signature');
-    if (!(await verifyWebhookSignature(rawBody, signature, webhookSecret))) {
+    const verified = await verifyProviderWebhook(
+      req,
+      rawBody,
+      provider,
+      connection as Record<string, unknown>,
+      webhookSecret
+    );
+    if (!verified) {
       return new Response(JSON.stringify({ error: 'Invalid webhook signature' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const syncFunctionName = provider === 'ownerrez' ? 'pms-ownerrez-sync' : 'pms-guesty-sync';
+    const syncFunctionByProvider: Record<string, string> = {
+      ownerrez: 'pms-ownerrez-sync',
+      guesty: 'pms-guesty-sync',
+      hostaway: 'pms-hostaway-sync',
+    };
+    const syncFunctionName = syncFunctionByProvider[provider];
+    if (!syncFunctionName) {
+      return new Response(JSON.stringify({ error: `Unsupported provider: ${provider}` }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const syncResponse = await fetch(`${supabaseUrl}/functions/v1/${syncFunctionName}`, {
       method: 'POST',

@@ -8,6 +8,7 @@ import {
   formatCurrency,
   formatDate,
 } from './email-dispatch.js';
+import { triggerPmsOutboundPush } from './pms-outbound.js';
 
 async function loadBookingContext(pool, bookingId) {
   const { rows } = await pool.query(
@@ -145,6 +146,9 @@ export async function confirmBookingAndSendEmails(pool, { bookingId, paymentInte
     );
     booking.status = 'confirmed';
     booking.confirmed_at = new Date();
+
+    // Push the freshly-confirmed booking to any connected PMS (non-blocking).
+    triggerPmsOutboundPush(bookingId);
   }
 
   const variables = buildBookingVariables(booking);
