@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   TrendingUp,
-  Users,
   DollarSign,
   Home,
   Calendar,
@@ -11,6 +10,13 @@ import {
   Network,
   ArrowRight,
   Mail,
+  CalendarCheck,
+  MapPin,
+  Sparkles,
+  Wallet,
+  Heart,
+  MessageSquare,
+  Plane,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
@@ -20,6 +26,27 @@ import PMSSettings from './PMSSettings';
 type DashboardTab = 'overview' | 'properties' | 'bookings' | 'referrals' | 'pms';
 type DashboardMode = 'guest' | 'host';
 type AdminView = 'main' | 'email-cms';
+
+function formatDate(value?: string) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function statusBadgeClass(status?: string) {
+  const normalized = (status || '').toLowerCase();
+  if (['confirmed', 'active', 'succeeded', 'paid', 'completed'].includes(normalized)) {
+    return 'bg-success-soft text-success';
+  }
+  if (['pending', 'processing'].includes(normalized)) {
+    return 'bg-amber-50 text-amber-700';
+  }
+  if (['cancelled', 'canceled', 'failed', 'declined'].includes(normalized)) {
+    return 'bg-rose-50 text-rose-700';
+  }
+  return 'bg-page-muted text-ink-muted';
+}
 
 export default function Dashboard({ onClose }: { onClose: () => void }) {
   const { profile, updateUserType, isAdmin } = useAuth();
@@ -89,307 +116,337 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
 
   const tabs: Array<{ id: DashboardTab; label: string; icon: typeof TrendingUp }> = [
     { id: 'overview', label: 'Overview', icon: TrendingUp },
-    { id: 'properties', label: 'Properties', icon: Home },
-    { id: 'bookings', label: 'Bookings', icon: Calendar },
+    { id: 'properties', label: 'Listings', icon: Home },
+    { id: 'bookings', label: 'Reservations', icon: Calendar },
     { id: 'referrals', label: 'Referrals', icon: Network },
-    { id: 'pms', label: 'PMS Integrations', icon: Settings },
+    { id: 'pms', label: 'Integrations', icon: Settings },
   ];
 
-  return (
-    <div className="fixed inset-0 bg-gray-50 z-50 overflow-auto">
-      <div className="min-h-screen">
-        <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-20">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-rose-500 rounded-xl flex items-center justify-center">
-                  <Home className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
-                  <p className="text-xs text-gray-500">Welcome back, {profile?.full_name}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {canHost && (
-                  <div className="flex rounded-full border border-gray-200 bg-gray-50 p-1">
-                    <button
-                      onClick={() => setDashboardMode('guest')}
-                      className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-                        dashboardMode === 'guest'
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-500 hover:text-gray-800'
-                      }`}
-                    >
-                      Guest
-                    </button>
-                    <button
-                      onClick={() => setDashboardMode('host')}
-                      className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-                        dashboardMode === 'host'
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-500 hover:text-gray-800'
-                      }`}
-                    >
-                      Host
-                    </button>
-                  </div>
-                )}
-                <button
-                  onClick={onClose}
-                  className="px-6 py-2.5 text-gray-700 hover:text-gray-900 font-medium transition"
-                >
-                  Back to Home
-                </button>
-              </div>
-            </div>
-          </div>
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const upcomingBookings = [...bookings]
+    .filter((b) => (b.check_in || '') >= todayStr)
+    .sort((a, b) => ((a.check_in || '') < (b.check_in || '') ? -1 : 1))
+    .slice(0, 5);
+  const recentEarnings = [...earnings]
+    .sort((a, b) => new Date(b.booking_date).getTime() - new Date(a.booking_date).getTime())
+    .slice(0, 5);
+
+  const statCards = [
+    { label: 'Total earnings', value: `$${stats.totalEarnings.toFixed(2)}`, icon: DollarSign, tone: 'text-success' },
+    { label: 'Pending earnings', value: `$${stats.pendingEarnings.toFixed(2)}`, icon: TrendingUp, tone: 'text-brand' },
+    { label: 'Active listings', value: `${stats.activeProperties}`, icon: Home, tone: 'text-ink' },
+    { label: 'Reservations', value: `${stats.totalBookings}`, icon: CalendarCheck, tone: 'text-ink' },
+  ];
+
+  function ReferralShareCard({ compact = false }: { compact?: boolean }) {
+    return (
+      <div className="card-surface p-5">
+        <div className="flex items-center gap-2 text-ink">
+          <Sparkles className="h-4 w-4 text-brand" />
+          <span className="text-sm font-semibold">Share &amp; earn</span>
         </div>
+        {!compact && (
+          <p className="mt-2 text-sm leading-6 text-ink-muted">
+            Invite hosts with your code and earn commission across three referral levels.
+          </p>
+        )}
+        <div className="mt-4 flex items-center gap-2">
+          <code className="flex-1 truncate rounded-control border border-border bg-page-muted px-4 py-2.5 text-base font-bold tracking-wider text-ink">
+            {profile?.referral_code || '—'}
+          </code>
+          <button type="button" onClick={copyReferralCode} className="btn-secondary !px-3 !py-2.5" aria-label="Copy referral code">
+            {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+          </button>
+        </div>
+        {!compact && stats.totalReferrals > 0 && (
+          <p className="mt-3 text-xs font-medium text-ink-muted">{stats.totalReferrals} direct referral{stats.totalReferrals === 1 ? '' : 's'}</p>
+        )}
+      </div>
+    );
+  }
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {isAdmin && (
-            <div className="mb-8 rounded-2xl border border-orange-200 bg-gradient-to-r from-orange-50 to-white p-2 shadow-sm">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAdminView('main')}
-                  className={`rounded-xl px-4 py-2.5 text-sm font-bold transition ${
-                    adminView === 'main'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  My dashboard
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAdminView('email-cms')}
-                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${
-                    adminView === 'email-cms'
-                      ? 'bg-orange-500 text-white shadow-sm'
-                      : 'text-orange-700 hover:bg-orange-100'
-                  }`}
-                >
-                  <Mail className="h-4 w-4" />
-                  Email CMS
-                </button>
+  return (
+    <div className="page-shell fixed inset-0 z-50 overflow-auto">
+      <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur-xl">
+        <div className="mx-auto max-w-content px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="logo-mark">
+                <Plane className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-base font-semibold text-ink">Dashboard</h1>
+                <p className="text-xs text-ink-muted">Welcome back, {profile?.full_name || 'there'}</p>
               </div>
             </div>
-          )}
-
-          {adminView === 'email-cms' && isAdmin ? (
-            <div className="-mx-4 overflow-hidden rounded-3xl border border-slate-800 sm:mx-0">
-              <EmailCmsDashboard embedded onClose={() => setAdminView('main')} />
-            </div>
-          ) : dashboardMode === 'guest' ? (
-            <div className="space-y-8">
-              <div className="rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 text-white shadow-xl">
-                <div className="max-w-3xl">
-                  <p className="mb-3 text-sm font-bold uppercase tracking-[0.22em] text-orange-300">
-                    Guest mode
-                  </p>
-                  <h2 className="text-4xl font-extrabold tracking-tight">
-                    Plan trips, save stays, and come back when you are ready to book.
-                  </h2>
-                  <p className="mt-4 text-lg leading-8 text-slate-300">
-                    Your guest dashboard will hold saved stays, upcoming trips, messages, and booking details as StayLoop grows.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-3">
-                {[
-                  ['Saved stays', 'Shortlist homes, cabins, beach houses, and city stays you want to revisit.'],
-                  ['Upcoming trips', 'Keep reservation details, check-in notes, and support in one place.'],
-                  ['Messages', 'Stay connected with hosts before and during a stay.'],
-                ].map(([title, copy]) => (
-                  <div key={title} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                    <h3 className="text-xl font-extrabold text-gray-900">{title}</h3>
-                    <p className="mt-3 leading-7 text-gray-600">{copy}</p>
-                  </div>
-                ))}
-              </div>
-
-              {!canHost && (
-                <div className="rounded-3xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-8 shadow-sm">
-                  <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
-                    <div>
-                      <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-600">
-                        Have a place to list?
-                      </p>
-                      <h3 className="mt-3 text-3xl font-extrabold text-gray-900">Become a host on StayLoop</h3>
-                      <p className="mt-3 max-w-2xl leading-7 text-gray-600">
-                        Upgrade your account to unlock host tools, PMS integrations, property listings, and booking management while keeping guest access.
-                      </p>
-                    </div>
+            <div className="flex items-center gap-3">
+              {canHost && (
+                <div className="flex rounded-pill border border-border bg-page-muted p-1">
+                  {(['guest', 'host'] as const).map((mode) => (
                     <button
-                      onClick={becomeHost}
-                      className="inline-flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-7 py-4 font-bold text-white shadow-lg transition hover:shadow-xl"
+                      key={mode}
+                      onClick={() => setDashboardMode(mode)}
+                      className={`rounded-pill px-4 py-1.5 text-sm font-semibold capitalize transition ${
+                        dashboardMode === mode ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink'
+                      }`}
                     >
-                      Become a host
-                      <ArrowRight className="h-5 w-5" />
+                      {mode}
                     </button>
-                  </div>
+                  ))}
                 </div>
               )}
-            </div>
-          ) : (
-            <>
-          <div className="mb-8 bg-gradient-to-r from-orange-500 to-rose-500 rounded-2xl p-8 text-white shadow-xl">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold mb-2">Your Referral Code</h2>
-                <p className="text-white/90">Share this code and earn passive income</p>
-              </div>
-              <Users className="w-12 h-12 text-white/80" />
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex-1 bg-white/20 backdrop-blur-sm rounded-xl px-6 py-4">
-                <span className="text-3xl font-bold tracking-wider">{profile?.referral_code}</span>
-              </div>
-              <button
-                onClick={copyReferralCode}
-                className="px-6 py-4 bg-white text-orange-600 font-semibold rounded-xl hover:bg-orange-50 transition-all shadow-lg flex items-center gap-2"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-5 h-5" />
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-5 h-5" />
-                    Copy Code
-                  </>
-                )}
+              <button onClick={onClose} className="btn-ghost">
+                Back to home
               </button>
             </div>
           </div>
+        </div>
+      </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">
-                ${stats.totalEarnings.toFixed(2)}
-              </div>
-              <div className="text-sm text-gray-500">Total Earnings</div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-orange-600" />
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">
-                ${stats.pendingEarnings.toFixed(2)}
-              </div>
-              <div className="text-sm text-gray-500">Pending Earnings</div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <Users className="w-6 h-6 text-blue-600" />
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">{stats.totalReferrals}</div>
-              <div className="text-sm text-gray-500">Direct Referrals</div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <Home className="w-6 h-6 text-purple-600" />
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 mb-1">{stats.activeProperties}</div>
-              <div className="text-sm text-gray-500">Active Properties</div>
-            </div>
+      <div className="mx-auto max-w-content px-4 py-8 sm:px-6 lg:px-8">
+        {isAdmin && (
+          <div className="mb-8 flex flex-wrap gap-2 rounded-pill border border-border bg-page-muted p-1">
+            <button
+              type="button"
+              onClick={() => setAdminView('main')}
+              className={`rounded-pill px-4 py-2 text-sm font-semibold transition ${
+                adminView === 'main' ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink'
+              }`}
+            >
+              My dashboard
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdminView('email-cms')}
+              className={`inline-flex items-center gap-2 rounded-pill px-4 py-2 text-sm font-semibold transition ${
+                adminView === 'email-cms' ? 'bg-brand text-brand-foreground shadow-card' : 'text-ink-muted hover:text-ink'
+              }`}
+            >
+              <Mail className="h-4 w-4" />
+              Email CMS
+            </button>
           </div>
+        )}
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="border-b border-gray-100">
-              <div className="flex gap-4 px-6">
+        {adminView === 'email-cms' && isAdmin ? (
+          <div className="-mx-4 overflow-hidden rounded-card border border-border sm:mx-0">
+            <EmailCmsDashboard embedded onClose={() => setAdminView('main')} />
+          </div>
+        ) : dashboardMode === 'guest' ? (
+          <div className="space-y-8">
+            <div>
+              <p className="section-label">Guest</p>
+              <h2 className="section-title mt-2">Welcome back, {profile?.full_name?.split(' ')[0] || 'traveler'}</h2>
+              <p className="section-copy mt-2 max-w-2xl">
+                Your trips, saved stays, and messages will live here. Start exploring to plan your next getaway.
+              </p>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-3">
+              {[
+                { icon: Plane, title: 'Upcoming trips', copy: 'Your reservations and check-in details will appear here once you book.' },
+                { icon: Heart, title: 'Saved stays', copy: 'Shortlist homes, cabins, and city stays you want to revisit.' },
+                { icon: MessageSquare, title: 'Messages', copy: 'Stay connected with hosts before and during your stay.' },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.title} className="card-surface p-6">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-control bg-brand/10 text-brand">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="mt-4 text-lg font-semibold text-ink">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-ink-muted">{item.copy}</p>
+                    <button onClick={onClose} className="btn-ghost mt-3 !px-0 !text-brand">
+                      Explore stays
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {!canHost && (
+              <div className="card-surface flex flex-col gap-6 p-8 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="section-label">Have a place to list?</p>
+                  <h3 className="mt-2 text-2xl font-semibold text-ink">Become a host on StayLoop</h3>
+                  <p className="mt-2 max-w-2xl text-sm leading-7 text-ink-muted">
+                    Unlock host tools, PMS integrations, listings, and booking management — while keeping full guest access.
+                  </p>
+                </div>
+                <button onClick={becomeHost} className="btn-primary shrink-0">
+                  Become a host
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="grid gap-8 lg:grid-cols-[15rem_1fr]">
+            <aside className="lg:sticky lg:top-24 lg:self-start">
+              <nav className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:gap-1 lg:overflow-visible lg:pb-0">
                 {tabs.map((tab) => {
                   const Icon = tab.icon;
+                  const active = activeTab === tab.id;
                   return (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-2 px-4 py-4 border-b-2 font-medium transition ${
-                        activeTab === tab.id
-                          ? 'border-orange-500 text-orange-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      className={`inline-flex shrink-0 items-center gap-3 rounded-control px-4 py-2.5 text-sm font-semibold transition ${
+                        active ? 'bg-page-muted text-ink' : 'text-ink-muted hover:bg-page-muted/60 hover:text-ink'
                       }`}
                     >
-                      <Icon className="w-5 h-5" />
+                      <Icon className={`h-4 w-4 ${active ? 'text-brand' : ''}`} />
                       {tab.label}
                     </button>
                   );
                 })}
+              </nav>
+              <div className="mt-6 hidden lg:block">
+                <ReferralShareCard />
               </div>
-            </div>
+            </aside>
 
-            <div className="p-6">
+            <main className="min-w-0 space-y-8">
               {activeTab === 'overview' && (
-                <div className="space-y-6">
+                <div className="space-y-8">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Activity</h3>
-                    <div className="text-gray-500 text-center py-12">
-                      No recent activity to display
+                    <h2 className="section-title">Overview</h2>
+                    <p className="section-copy mt-1">A snapshot of your hosting performance.</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                    {statCards.map((card) => {
+                      const Icon = card.icon;
+                      return (
+                        <div key={card.label} className="card-surface p-5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-ink-muted">{card.label}</span>
+                            <Icon className={`h-4 w-4 ${card.tone}`} />
+                          </div>
+                          <div className={`mt-3 text-2xl font-semibold ${card.tone === 'text-success' ? 'text-success' : 'text-ink'}`}>
+                            {card.value}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <div className="card-surface p-6">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base font-semibold text-ink">Upcoming reservations</h3>
+                        <button onClick={() => setActiveTab('bookings')} className="btn-ghost !px-0 !text-brand !text-sm">
+                          View all
+                        </button>
+                      </div>
+                      {upcomingBookings.length === 0 ? (
+                        <div className="py-10 text-center">
+                          <Calendar className="mx-auto h-10 w-10 text-ink-subtle" />
+                          <p className="mt-3 text-sm text-ink-muted">No upcoming reservations</p>
+                        </div>
+                      ) : (
+                        <ul className="mt-4 divide-y divide-border">
+                          {upcomingBookings.map((booking) => (
+                            <li key={booking.id} className="flex items-center justify-between gap-4 py-3">
+                              <div>
+                                <p className="text-sm font-semibold text-ink">
+                                  {formatDate(booking.check_in)} – {formatDate(booking.check_out)}
+                                </p>
+                                <span className={`mt-1 inline-block rounded-pill px-2 py-0.5 text-xs font-semibold capitalize ${statusBadgeClass(booking.status)}`}>
+                                  {booking.status}
+                                </span>
+                              </div>
+                              <span className="text-sm font-semibold text-ink">${booking.total_amount}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
+
+                    <div className="card-surface p-6">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base font-semibold text-ink">Recent earnings</h3>
+                        <button onClick={() => setActiveTab('referrals')} className="btn-ghost !px-0 !text-brand !text-sm">
+                          View all
+                        </button>
+                      </div>
+                      {recentEarnings.length === 0 ? (
+                        <div className="py-10 text-center">
+                          <Wallet className="mx-auto h-10 w-10 text-ink-subtle" />
+                          <p className="mt-3 text-sm text-ink-muted">No earnings yet</p>
+                        </div>
+                      ) : (
+                        <ul className="mt-4 divide-y divide-border">
+                          {recentEarnings.map((earning) => (
+                            <li key={earning.id} className="flex items-center justify-between gap-4 py-3">
+                              <div>
+                                <p className="text-sm font-semibold text-ink">Level {earning.referral_level} commission</p>
+                                <p className="text-xs text-ink-muted">{formatDate(earning.booking_date)} · {earning.status}</p>
+                              </div>
+                              <span className="text-sm font-semibold text-success">+${earning.commission_amount}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="lg:hidden">
+                    <ReferralShareCard />
                   </div>
                 </div>
               )}
 
               {activeTab === 'properties' && (
-                <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold text-gray-900">Your Properties</h3>
-                    <button className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-md">
-                      Add Property
-                    </button>
+                <div className="space-y-6">
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <h2 className="section-title">Listings</h2>
+                      <p className="section-copy mt-1">Manage the homes you host on StayLoop.</p>
+                    </div>
+                    <button className="btn-primary shrink-0">Add listing</button>
                   </div>
+
                   {properties.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Home className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500 mb-4">No properties listed yet</p>
-                      <button className="px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-md">
-                        List Your First Property
-                      </button>
+                    <div className="card-surface px-8 py-16 text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-control bg-brand/10 text-brand">
+                        <Home className="h-6 w-6" />
+                      </div>
+                      <h3 className="mt-4 text-lg font-semibold text-ink">No listings yet</h3>
+                      <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
+                        Create your first listing to start welcoming guests and earning.
+                      </p>
+                      <button className="btn-primary mt-6">List your first property</button>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                       {properties.map((property) => (
-                        <div
-                          key={property.id}
-                          className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl hover:border-orange-200 transition"
-                        >
-                          <div className="w-24 h-24 bg-gray-100 rounded-lg overflow-hidden">
-                            <img
-                              src={property.images[0] || ''}
-                              alt={property.title}
-                              className="w-full h-full object-cover"
-                            />
+                        <div key={property.id} className="card-surface overflow-hidden">
+                          <div className="aspect-[4/3] overflow-hidden bg-page-muted">
+                            {property.images[0] ? (
+                              <img src={property.images[0]} alt={property.title} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-ink-subtle">
+                                <Home className="h-8 w-8" />
+                              </div>
+                            )}
                           </div>
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-gray-900">{property.title}</h4>
-                            <p className="text-sm text-gray-500">
+                          <div className="p-5">
+                            <div className="flex items-start justify-between gap-3">
+                              <h4 className="font-semibold text-ink">{property.title}</h4>
+                              <span className={`shrink-0 rounded-pill px-2 py-0.5 text-xs font-semibold ${property.is_active ? 'bg-success-soft text-success' : 'bg-page-muted text-ink-muted'}`}>
+                                {property.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+                            <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-muted">
+                              <MapPin className="h-3.5 w-3.5 text-ink-subtle" />
                               {property.city}, {property.state}
                             </p>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-lg font-bold text-gray-900">
-                              ${property.base_price}/night
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {property.is_active ? 'Active' : 'Inactive'}
-                            </div>
+                            <p className="mt-3 text-sm text-ink">
+                              <span className="text-lg font-semibold">${property.base_price}</span>
+                              <span className="text-ink-muted"> / night</span>
+                            </p>
                           </div>
                         </div>
                       ))}
@@ -399,35 +456,42 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
               )}
 
               {activeTab === 'bookings' && (
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-6">Your Bookings</h3>
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="section-title">Reservations</h2>
+                    <p className="section-copy mt-1">Track upcoming and past stays across your listings.</p>
+                  </div>
+
                   {bookings.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500">No bookings yet</p>
+                    <div className="card-surface px-8 py-16 text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-control bg-brand/10 text-brand">
+                        <Calendar className="h-6 w-6" />
+                      </div>
+                      <h3 className="mt-4 text-lg font-semibold text-ink">No reservations yet</h3>
+                      <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
+                        Once guests book your listings, their reservations will appear here.
+                      </p>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="card-surface divide-y divide-border">
                       {bookings.map((booking) => (
-                        <div
-                          key={booking.id}
-                          className="p-4 border border-gray-200 rounded-xl hover:border-orange-200 transition"
-                        >
-                          <div className="flex items-center justify-between">
+                        <div key={booking.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
+                          <div className="flex items-center gap-4">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-control bg-page-muted text-ink-muted">
+                              <CalendarCheck className="h-5 w-5" />
+                            </div>
                             <div>
-                              <div className="font-semibold text-gray-900">
-                                {booking.check_in} - {booking.check_out}
-                              </div>
-                              <div className="text-sm text-gray-500">{booking.status}</div>
+                              <p className="font-semibold text-ink">
+                                {formatDate(booking.check_in)} – {formatDate(booking.check_out)}
+                              </p>
+                              <span className={`mt-1 inline-block rounded-pill px-2 py-0.5 text-xs font-semibold capitalize ${statusBadgeClass(booking.status)}`}>
+                                {booking.status}
+                              </span>
                             </div>
-                            <div className="text-right">
-                              <div className="text-lg font-bold text-gray-900">
-                                ${booking.total_amount}
-                              </div>
-                              <div className="text-sm text-green-600">
-                                You earn: ${booking.host_payout}
-                              </div>
-                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-base font-semibold text-ink">${booking.total_amount}</p>
+                            <p className="text-sm text-success">You earn ${booking.host_payout}</p>
                           </div>
                         </div>
                       ))}
@@ -437,59 +501,50 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
               )}
 
               {activeTab === 'referrals' && (
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">Referral Network</h3>
-                  <div className="bg-gradient-to-br from-orange-50 to-rose-50 rounded-xl p-6 mb-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <div className="text-sm text-gray-600 mb-1">Commission Structure</div>
-                        <div className="text-xs text-gray-500">Earn from 3 levels deep</div>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between py-2">
-                        <span className="text-sm font-medium text-gray-700">Level 1 (Direct)</span>
-                        <span className="font-bold text-orange-600">3%</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2">
-                        <span className="text-sm font-medium text-gray-700">Level 2</span>
-                        <span className="font-bold text-orange-600">2%</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2">
-                        <span className="text-sm font-medium text-gray-700">Level 3</span>
-                        <span className="font-bold text-orange-600">1%</span>
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="section-title">Referrals</h2>
+                    <p className="section-copy mt-1">Earn commission across three levels when hosts you invite get bookings.</p>
+                  </div>
+
+                  <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+                    <ReferralShareCard />
+                    <div className="card-surface p-6">
+                      <h3 className="text-base font-semibold text-ink">Commission structure</h3>
+                      <div className="mt-4 space-y-2">
+                        {[
+                          ['Level 1 — Direct', '3%'],
+                          ['Level 2', '2%'],
+                          ['Level 3', '1%'],
+                        ].map(([label, pct]) => (
+                          <div key={label} className="flex items-center justify-between rounded-control bg-page-muted px-4 py-3">
+                            <span className="text-sm font-medium text-ink">{label}</span>
+                            <span className="text-sm font-bold text-brand">{pct}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
 
                   {earnings.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Network className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500 mb-2">No referral earnings yet</p>
-                      <p className="text-sm text-gray-400">Share your code to start earning</p>
+                    <div className="card-surface px-8 py-16 text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-control bg-brand/10 text-brand">
+                        <Network className="h-6 w-6" />
+                      </div>
+                      <h3 className="mt-4 text-lg font-semibold text-ink">No referral earnings yet</h3>
+                      <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">Share your code to start earning.</p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="card-surface divide-y divide-border">
                       {earnings.map((earning) => (
-                        <div
-                          key={earning.id}
-                          className="flex items-center justify-between p-4 border border-gray-200 rounded-xl"
-                        >
+                        <div key={earning.id} className="flex items-center justify-between gap-4 p-5">
                           <div>
-                            <div className="font-medium text-gray-900">
-                              Level {earning.referral_level} Commission
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {earning.commission_percentage}% · {earning.status}
-                            </div>
+                            <p className="font-medium text-ink">Level {earning.referral_level} commission</p>
+                            <p className="text-sm text-ink-muted">{earning.commission_percentage}% · {earning.status}</p>
                           </div>
                           <div className="text-right">
-                            <div className="text-lg font-bold text-green-600">
-                              +${earning.commission_amount}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {new Date(earning.booking_date).toLocaleDateString()}
-                            </div>
+                            <p className="text-base font-semibold text-success">+${earning.commission_amount}</p>
+                            <p className="text-xs text-ink-muted">{formatDate(earning.booking_date)}</p>
                           </div>
                         </div>
                       ))}
@@ -499,13 +554,17 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
               )}
 
               {activeTab === 'pms' && (
-                <PMSSettings />
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="section-title">Integrations</h2>
+                    <p className="section-copy mt-1">Connect a property management system to sync listings, bookings, and availability.</p>
+                  </div>
+                  <PMSSettings />
+                </div>
               )}
-            </div>
+            </main>
           </div>
-            </>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
