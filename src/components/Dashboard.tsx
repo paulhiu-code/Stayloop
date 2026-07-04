@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, ReferralEarning, Property, Booking } from '../lib/supabase';
+import { publishListing, unpublishListing } from '../lib/listing';
 import EmailCmsDashboard from './admin/EmailCmsDashboard';
 import PMSSettings from './PMSSettings';
 
@@ -21,8 +22,16 @@ type DashboardTab = 'overview' | 'properties' | 'bookings' | 'referrals' | 'pms'
 type DashboardMode = 'guest' | 'host';
 type AdminView = 'main' | 'email-cms';
 
-export default function Dashboard({ onClose }: { onClose: () => void }) {
+type DashboardProps = {
+  onClose: () => void;
+  onCreateListing?: () => void;
+  onEditListing?: (id: string) => void;
+  onBecomeHost?: () => void;
+};
+
+export default function Dashboard({ onClose, onCreateListing, onEditListing, onBecomeHost }: DashboardProps) {
   const { profile, updateUserType, isAdmin } = useAuth();
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [adminView, setAdminView] = useState<AdminView>('main');
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [dashboardMode, setDashboardMode] = useState<DashboardMode>('guest');
@@ -83,8 +92,29 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
 
   async function becomeHost() {
     await updateUserType('both');
+    if (onBecomeHost) {
+      onBecomeHost();
+      return;
+    }
     setDashboardMode('host');
     setActiveTab('properties');
+  }
+
+  async function toggleListingActive(property: Property) {
+    setTogglingId(property.id);
+    try {
+      if (property.is_active) {
+        await unpublishListing(property.id);
+      } else {
+        await publishListing(property.id);
+      }
+      await fetchDashboardData();
+    } catch (error) {
+      console.error('Failed to update listing status:', error);
+      alert(error instanceof Error ? error.message : 'Could not update listing. Please try again.');
+    } finally {
+      setTogglingId(null);
+    }
   }
 
   const tabs: Array<{ id: DashboardTab; label: string; icon: typeof TrendingUp }> = [
@@ -351,7 +381,10 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
                 <div>
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-gray-900">Your Properties</h3>
-                    <button className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-md">
+                    <button
+                      onClick={() => onCreateListing?.()}
+                      className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-md"
+                    >
                       Add Property
                     </button>
                   </div>
@@ -359,7 +392,10 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
                     <div className="text-center py-12">
                       <Home className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                       <p className="text-gray-500 mb-4">No properties listed yet</p>
-                      <button className="px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-md">
+                      <button
+                        onClick={() => onCreateListing?.()}
+                        className="px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-md"
+                      >
                         List Your First Property
                       </button>
                     </div>
@@ -368,28 +404,61 @@ export default function Dashboard({ onClose }: { onClose: () => void }) {
                       {properties.map((property) => (
                         <div
                           key={property.id}
-                          className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl hover:border-orange-200 transition"
+                          className="flex flex-col gap-4 p-4 border border-gray-200 rounded-xl hover:border-orange-200 transition sm:flex-row sm:items-center"
                         >
-                          <div className="w-24 h-24 bg-gray-100 rounded-lg overflow-hidden">
-                            <img
-                              src={property.images[0] || ''}
-                              alt={property.title}
-                              className="w-full h-full object-cover"
-                            />
+                          <div className="w-full h-40 sm:w-24 sm:h-24 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                            {property.images[0] ? (
+                              <img
+                                src={property.images[0]}
+                                alt={property.title}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Home className="w-8 h-8 text-gray-300" />
+                            )}
                           </div>
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-gray-900">{property.title}</h4>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="font-semibold text-gray-900 truncate">
+                                {property.title?.trim() || 'Untitled listing'}
+                              </h4>
+                              <span
+                                className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                                  property.is_active ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {property.is_active ? 'Live' : 'Draft'}
+                              </span>
+                            </div>
                             <p className="text-sm text-gray-500">
-                              {property.city}, {property.state}
+                              {[property.city, property.state].filter(Boolean).join(', ')}
                             </p>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-lg font-bold text-gray-900">
+                            <div className="mt-1 text-sm font-bold text-gray-900">
                               ${property.base_price}/night
                             </div>
-                            <div className="text-sm text-gray-500">
-                              {property.is_active ? 'Active' : 'Inactive'}
-                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => onEditListing?.(property.id)}
+                              className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-700 transition hover:bg-gray-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => toggleListingActive(property)}
+                              disabled={togglingId === property.id}
+                              className={`px-4 py-2 rounded-xl text-sm font-bold transition disabled:opacity-50 ${
+                                property.is_active
+                                  ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+                              }`}
+                            >
+                              {togglingId === property.id
+                                ? '…'
+                                : property.is_active
+                                  ? 'Unpublish'
+                                  : 'Publish'}
+                            </button>
                           </div>
                         </div>
                       ))}
