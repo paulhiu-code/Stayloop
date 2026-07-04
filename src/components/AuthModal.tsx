@@ -149,7 +149,7 @@ export default function AuthModal({
       }}
     >
       <div
-        className="relative my-6 max-h-[calc(100vh-3rem)] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
+        className="modal-shell relative my-6 max-h-[calc(100vh-3rem)] w-full max-w-md overflow-y-auto"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <button
@@ -160,10 +160,10 @@ export default function AuthModal({
         </button>
 
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+          <h2 className="mb-2 text-3xl font-semibold text-ink">
             {isForgotPassword ? 'Reset your password' : isSignUp ? 'Join StayLoop' : 'Welcome Back'}
           </h2>
-          <p className="text-gray-600">
+          <p className="text-ink-muted">
             {isForgotPassword
               ? 'We will email you a secure link to choose a new password'
               : isSignUp
@@ -191,7 +191,7 @@ export default function AuthModal({
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition"
+                  className="input-field"
                   required
                 />
               </div>
@@ -211,10 +211,10 @@ export default function AuthModal({
                       key={option.id}
                       type="button"
                       onClick={() => setJoinIntent(option.id)}
-                      className={`rounded-2xl border p-4 text-left transition ${
+                      className={`rounded-card border p-4 text-left transition ${
                         joinIntent === option.id
-                          ? 'border-orange-400 bg-orange-50 shadow-sm'
-                          : 'border-gray-200 bg-white hover:border-orange-200 hover:bg-orange-50/40'
+                          ? 'border-brand bg-brand-soft shadow-sm'
+                          : 'border-border bg-surface hover:border-brand/30 hover:bg-brand-soft/40'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -310,7 +310,7 @@ export default function AuthModal({
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-rose-600 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary w-full !py-4 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading
               ? 'Please wait...'
@@ -332,7 +332,7 @@ export default function AuthModal({
                 setError('');
                 setSuccessMessage('');
               }}
-              className="text-sm font-medium text-orange-600 transition hover:text-orange-700"
+              className="text-sm font-medium text-brand transition hover:opacity-80"
             >
               Forgot your password?
             </button>
@@ -352,7 +352,7 @@ export default function AuthModal({
               setError('');
               setSuccessMessage('');
             }}
-            className="text-orange-600 hover:text-orange-700 font-medium transition"
+            className="font-medium text-brand transition hover:opacity-80"
           >
             {isForgotPassword
               ? 'Back to sign in'

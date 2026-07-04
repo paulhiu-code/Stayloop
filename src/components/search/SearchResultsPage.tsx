@@ -9,6 +9,7 @@ import {
   type SearchResultProperty,
 } from '../../lib/search';
 import { buildSearchPath, parseSearchParams } from '../../lib/searchUrl';
+import { withThemeParam } from '../../themes/url';
 import Header from '../Header';
 import PropertyCard from '../PropertyCard';
 import SearchBar from './SearchBar';
@@ -28,7 +29,7 @@ function filtersFromLocation(initialFilters?: SearchFilters): SearchFilters {
 }
 
 function syncUrl(filters: SearchFilters) {
-  const path = buildSearchPath(filters);
+  const path = withThemeParam(buildSearchPath(filters));
   window.history.replaceState({}, '', path);
 }
 
@@ -114,21 +115,21 @@ export default function SearchResultsPage({
   ].filter(Boolean);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
+    <div className="page-shell">
       <Header
         onShowAuth={onShowAuth || (() => undefined)}
         onShowDashboard={() => undefined}
         onNavigate={() => onNavigateHome()}
       />
 
-      <section className="border-b border-orange-100 bg-white/80 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <section className="border-b border-border bg-surface">
+        <div className="mx-auto max-w-content px-4 py-8 sm:px-6 lg:px-8">
           <div className="mb-6">
-            <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">Search stays</p>
-            <h1 className="mt-2 text-3xl font-extrabold text-gray-900 sm:text-4xl">{heading}</h1>
+            <p className="section-label">Search stays</p>
+            <h1 className="section-title mt-2">{heading}</h1>
             {subtitleParts.length > 0 && (
-              <p className="mt-2 flex flex-wrap items-center gap-2 text-gray-600">
-                <MapPin className="h-4 w-4 text-orange-500" />
+              <p className="mt-2 flex flex-wrap items-center gap-2 text-ink-muted">
+                <MapPin className="h-4 w-4 text-brand" />
                 {subtitleParts.join(' · ')}
               </p>
             )}
@@ -136,15 +137,11 @@ export default function SearchResultsPage({
 
           <SearchBar filters={draftFilters} onChange={updateDraftFilters} onSearch={() => runSearch()} />
 
-          <CategoryPills
-            className="mt-4"
-            activeCategory={activeFilters.category}
-            onSelect={applyCategory}
-          />
+          <CategoryPills className="mt-4" activeCategory={activeFilters.category} onSelect={applyCategory} />
         </div>
       </section>
 
-      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-content px-4 py-10 sm:px-6 lg:px-8">
         <div className="mb-8">
           <SearchFiltersBar
             filters={draftFilters}
@@ -154,7 +151,7 @@ export default function SearchResultsPage({
         </div>
 
         {error && (
-          <div className="mb-8 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-700">
+          <div className="mb-8 rounded-card border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-700">
             {error}
           </div>
         )}
@@ -162,10 +159,10 @@ export default function SearchResultsPage({
         {loading ? (
           <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="animate-pulse">
-                <div className="mb-4 aspect-[4/3] rounded-2xl bg-gray-200" />
-                <div className="mb-2 h-6 rounded bg-gray-200" />
-                <div className="h-4 w-2/3 rounded bg-gray-200" />
+              <div key={index}>
+                <div className="skeleton-block mb-4 aspect-[4/3]" />
+                <div className="skeleton-block mb-2 h-6" />
+                <div className="skeleton-block h-4 w-2/3" />
               </div>
             ))}
           </div>
@@ -173,8 +170,8 @@ export default function SearchResultsPage({
           <>
             <div className="mb-8 flex items-end justify-between gap-4">
               <div>
-                <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">Results</p>
-                <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+                <p className="section-label">Results</p>
+                <h2 className="section-title mt-2 text-2xl">
                   {totalCount} {totalCount === 1 ? 'stay' : 'stays'} found
                 </h2>
               </div>
@@ -198,12 +195,7 @@ export default function SearchResultsPage({
 
             {hasMore && (
               <div className="mt-12 flex justify-center">
-                <button
-                  type="button"
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-8 py-4 text-base font-bold text-white shadow-lg transition hover:from-orange-600 hover:to-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
-                >
+                <button type="button" onClick={loadMore} disabled={loadingMore} className="btn-primary !px-8 !py-4">
                   {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
                   Load more stays
                 </button>
@@ -211,12 +203,12 @@ export default function SearchResultsPage({
             )}
           </>
         ) : (
-          <div className="rounded-[2rem] border border-orange-100 bg-white px-8 py-20 text-center shadow-xl">
-            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-lg">
+          <div className="card-surface px-8 py-20 text-center">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-card bg-brand text-brand-foreground shadow-brand">
               <SearchX className="h-8 w-8" />
             </div>
-            <h3 className="text-2xl font-extrabold text-gray-900">No stays match your search</h3>
-            <p className="mx-auto mt-3 max-w-xl text-gray-600">
+            <h3 className="text-2xl font-semibold text-ink">No stays match your search</h3>
+            <p className="mx-auto mt-3 max-w-xl text-ink-muted">
               Try widening your dates, adjusting price filters, or searching a nearby destination.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -227,15 +219,11 @@ export default function SearchResultsPage({
                   setDraftFilters(cleared);
                   setActiveFilters(cleared);
                 }}
-                className="rounded-xl border border-gray-200 px-6 py-3 text-sm font-bold text-gray-700 transition hover:border-orange-300 hover:bg-orange-50"
+                className="btn-secondary"
               >
                 Clear filters
               </button>
-              <button
-                type="button"
-                onClick={onNavigateHome}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:from-orange-600 hover:to-rose-600"
-              >
+              <button type="button" onClick={onNavigateHome} className="btn-primary">
                 <Sparkles className="h-4 w-4" />
                 Browse featured stays
               </button>

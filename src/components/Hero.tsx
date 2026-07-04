@@ -8,6 +8,9 @@ type HeroProps = {
   onSearch: (filters: SearchFilters) => void;
 };
 
+const heroImage =
+  'https://images.pexels.com/photos/457881/pexels-photo-457881.jpeg?auto=compress&cs=tinysrgb&w=1800';
+
 export default function Hero({ onSearch }: HeroProps) {
   const [filters, setFilters] = useState<SearchFilters>({ guests: 1 });
 
@@ -21,31 +24,54 @@ export default function Hero({ onSearch }: HeroProps) {
     setFilters(clearCategoryIfManualEdit(filters, next));
   }
 
+  const features = [
+    { icon: ShieldCheck, title: 'Verified stays', copy: 'Reviewed details and photos.' },
+    { icon: SlidersHorizontal, title: 'Flexible booking', copy: 'Instant book or request.' },
+    { icon: ReceiptText, title: 'No surprise totals', copy: 'Fees shown before checkout.' },
+  ];
+
   return (
-    <section className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-orange-950 overflow-hidden text-white">
+    <section className="hero-shell">
       <div className="absolute inset-0">
-        <img
-          src="https://images.pexels.com/photos/457881/pexels-photo-457881.jpeg?auto=compress&cs=tinysrgb&w=1800"
-          alt=""
-          className="h-full w-full object-cover object-center opacity-95"
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_34%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.05),transparent_30%),linear-gradient(90deg,rgba(15,23,42,0.80)_0%,rgba(15,23,42,0.54)_44%,rgba(15,23,42,0.04)_100%)]"></div>
+        <img src={heroImage} alt="" className="h-full w-full object-cover object-center" />
+        <div className="hero-overlay" />
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
-        <div className="grid items-center gap-16 lg:grid-cols-[1.05fr_0.95fr]">
+      <div className="relative mx-auto max-w-content px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
+        <div className="theme-wander-only max-w-3xl">
+          <p className="hero-badge">Luxury vacation rentals · 24/7 support</p>
+          <h1 className="hero-title mt-8">Find your happy place</h1>
+          <p className="hero-copy mt-6">
+            Only the best homes, expertly operated. Compare stays with clear pricing and real booking support.
+          </p>
+
+          <SearchBar
+            variant="hero"
+            className="mt-10 max-w-4xl"
+            filters={filters}
+            onChange={handleFiltersChange}
+            onSearch={() => onSearch(filters)}
+          />
+
+          <CategoryPills
+            variant="hero"
+            className="mt-6"
+            activeCategory={filters.category}
+            onSelect={handleCategory}
+          />
+        </div>
+
+        <div className="theme-atlas-only grid items-center gap-16 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-semibold text-orange-100 shadow-sm backdrop-blur">
-              <Sparkles className="h-4 w-4 text-orange-300" />
+            <div className="hero-badge">
+              <Sparkles className="h-4 w-4 text-brand-soft" />
               Stays with verified details, flexible booking, and clear fees
             </div>
 
-            <h1 className="mt-8 text-5xl font-extrabold leading-[0.95] tracking-tight drop-shadow-[0_3px_18px_rgba(15,23,42,0.65)] sm:text-6xl lg:text-7xl">
-              Book the stay that makes the trip.
-            </h1>
-
-            <p className="mt-8 max-w-2xl text-lg leading-8 text-slate-100 drop-shadow-[0_2px_12px_rgba(15,23,42,0.75)] sm:text-xl">
-              StayLoop helps travelers compare homes, hotel rooms, cabins, and unique stays with upfront pricing and real booking support.
+            <h1 className="hero-title mt-8">Book the stay that makes the trip.</h1>
+            <p className="hero-copy mt-8">
+              StayLoop helps travelers compare homes, hotel rooms, cabins, and unique stays with upfront pricing and real
+              booking support.
             </p>
 
             <SearchBar
@@ -65,26 +91,26 @@ export default function Hero({ onSearch }: HeroProps) {
           </div>
 
           <div className="relative">
-            <div className="absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-orange-400/30 to-rose-500/20 blur-3xl"></div>
+            <div className="absolute -inset-6 rounded-[3rem] bg-brand/20 blur-3xl" />
             <div className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-white/10 p-4 shadow-2xl backdrop-blur">
               <img
                 src="https://images.unsplash.com/photo-1762529716272-b316f61502e7?auto=format&fit=crop&w=1400&q=80"
                 alt="Modern coastal living room with neutral sofa and plants"
                 className="h-[34rem] w-full rounded-[2rem] object-cover"
               />
-              <div className="absolute bottom-8 left-8 right-8 rounded-[2rem] border border-white/20 bg-slate-950/90 p-6 shadow-2xl backdrop-blur">
+              <div className="absolute bottom-8 left-8 right-8 rounded-[2rem] border border-white/20 bg-surface-inverse/90 p-6 shadow-2xl backdrop-blur">
                 <div className="flex items-start justify-between gap-5">
                   <div>
-                    <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-200">This weekend, your way</p>
-                    <h2 className="mt-2 text-2xl font-extrabold">Beach houses, cabins, city stays, and more</h2>
-                    <p className="mt-2 text-sm text-slate-300">Compare guest favorites with clear totals before checkout.</p>
+                    <p className="text-sm font-bold uppercase tracking-[0.22em] text-brand-soft">This weekend, your way</p>
+                    <h2 className="mt-2 font-display text-2xl text-hero-foreground">Beach houses, cabins, city stays, and more</h2>
+                    <p className="mt-2 text-sm text-hero-muted">Compare guest favorites with clear totals before checkout.</p>
                   </div>
-                  <div className="rounded-2xl bg-white px-4 py-3 text-right text-gray-900">
+                  <div className="rounded-2xl bg-surface px-4 py-3 text-right text-ink">
                     <div className="flex items-center gap-1 text-sm font-bold">
                       <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
                       4.94
                     </div>
-                    <p className="mt-1 text-xs font-semibold text-gray-500">Guest favorite</p>
+                    <p className="mt-1 text-xs font-semibold text-ink-muted">Guest favorite</p>
                   </div>
                 </div>
               </div>
@@ -92,31 +118,27 @@ export default function Hero({ onSearch }: HeroProps) {
           </div>
         </div>
 
-        <div className="mt-16 grid gap-4 md:grid-cols-3">
-          {[
-            {
-              icon: ShieldCheck,
-              title: 'Verified stays',
-              copy: 'Reviewed details and photos.',
-            },
-            {
-              icon: SlidersHorizontal,
-              title: 'Flexible booking',
-              copy: 'Instant book or request.',
-            },
-            {
-              icon: ReceiptText,
-              title: 'No surprise totals',
-              copy: 'Fees shown before checkout.',
-            },
-          ].map((feature) => {
+        <div className="theme-wander-only mt-14 grid gap-4 md:grid-cols-3">
+          {features.map((feature) => {
             const Icon = feature.icon;
-
             return (
-              <div key={feature.title} className="rounded-[2rem] border border-white/15 bg-slate-950/65 p-6 shadow-xl backdrop-blur">
-                <Icon className="h-8 w-8 text-orange-300" />
+              <div key={feature.title} className="rounded-card border border-white/10 bg-white/5 p-5 backdrop-blur">
+                <Icon className="h-6 w-6 text-hero-foreground" />
+                <h3 className="mt-4 text-base font-semibold">{feature.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-hero-muted">{feature.copy}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="theme-atlas-only mt-16 grid gap-4 md:grid-cols-3">
+          {features.map((feature) => {
+            const Icon = feature.icon;
+            return (
+              <div key={feature.title} className="feature-tile">
+                <Icon className="h-8 w-8 text-brand-soft" />
                 <h3 className="mt-5 text-xl font-bold">{feature.title}</h3>
-                <p className="mt-3 text-sm leading-6 text-slate-300">{feature.copy}</p>
+                <p className="mt-3 text-sm leading-6 text-hero-muted">{feature.copy}</p>
               </div>
             );
           })}
