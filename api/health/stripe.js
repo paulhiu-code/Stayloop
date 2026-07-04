@@ -1,6 +1,10 @@
 import { getStripeHealth } from '../../server/handlers/health.js';
+import { assertInternalAccess } from '../../server/lib/internalAuth.js';
 import { runHandler } from '../_lib/respond.js';
 
-export default function handler(_req, res) {
-  return runHandler(res, getStripeHealth);
+export default function handler(req, res) {
+  return runHandler(res, async () => {
+    assertInternalAccess(req);
+    return getStripeHealth();
+  });
 }

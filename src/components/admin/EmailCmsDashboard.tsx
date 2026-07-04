@@ -460,6 +460,7 @@ export default function EmailCmsDashboard({
                         <iframe
                           title="Email preview"
                           srcDoc={renderedPreview.html}
+                          sandbox=""
                           className="h-[640px] w-full bg-white"
                         />
                       </div>

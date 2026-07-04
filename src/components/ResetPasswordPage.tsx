@@ -39,14 +39,10 @@ export default function ResetPasswordPage({ onClose }: { onClose: () => void }) 
         return;
       }
 
-      const { data, error: sessionLookupError } = await supabase.auth.getSession();
+      const { error: sessionLookupError } = await supabase.auth.getSession();
       if (!active) return;
       if (sessionLookupError) {
         setError(sessionLookupError.message);
-        return;
-      }
-      if (data.session) {
-        setReady(true);
         return;
       }
 
