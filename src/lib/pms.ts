@@ -26,7 +26,9 @@ export function formatSyncError(error: unknown): string {
 
 
 
-export type PMSProvider = 'ownerrez' | 'guesty';
+export type PMSProvider = 'ownerrez' | 'guesty' | 'hostaway';
+
+export type PMSSyncDirection = 'inbound' | 'outbound' | 'two_way';
 
 export interface PMSConnection {
   id: string;
@@ -34,6 +36,7 @@ export interface PMSConnection {
   pms_provider: PMSProvider;
   account_name: string | null;
   is_active: boolean;
+  sync_direction: PMSSyncDirection;
   oauth_expires_at: string | null;
   sync_settings: Record<string, unknown>;
   last_sync_at: string | null;
@@ -44,7 +47,7 @@ export interface PMSConnection {
 }
 
 const PMS_CONNECTION_COLUMNS =
-  'id, user_id, pms_provider, account_name, is_active, oauth_expires_at, sync_settings, last_sync_at, sync_status, sync_error, created_at, updated_at';
+  'id, user_id, pms_provider, account_name, is_active, sync_direction, oauth_expires_at, sync_settings, last_sync_at, sync_status, sync_error, created_at, updated_at';
 
 export interface PMSPropertyMapping {
   id: string;
@@ -132,24 +135,76 @@ async function invokePMSEdgeFunction(
   return payload;
 }
 
-export const pmsProviders = [
+export interface PMSCredentialField {
+  key: string;
+  label: string;
+  placeholder: string;
+  secret?: boolean;
+  optional?: boolean;
+}
+
+export interface PMSProviderInfo {
+  id: PMSProvider;
+  name: string;
+  description: string;
+  features: string[];
+  setupUrl: string;
+  /** Fields collected on the connect form for this provider. */
+  fields: PMSCredentialField[];
+  /** Whether StayLoop can push bookings into this PMS via the public API today. */
+  outboundKind: 'reservation' | 'calendar_block';
+}
+
+export const pmsProviders: PMSProviderInfo[] = [
   {
-    id: 'ownerrez' as const,
+    id: 'ownerrez',
     name: 'OwnerRez',
-    logo: 'https://www.ownerrez.com/images/logo.svg',
     description: 'Connect your OwnerRez account to sync properties, bookings, and availability',
     features: ['Property Sync', 'Booking Sync', 'Calendar Sync', 'Real-time Webhooks'],
     setupUrl: 'https://www.ownerrez.com/support/articles/api-overview',
+    fields: [
+      { key: 'ownerrez_email', label: 'OwnerRez login email', placeholder: 'you@example.com' },
+      { key: 'access_token', label: 'Access token (pt_…)', placeholder: 'Paste your OwnerRez token', secret: true },
+    ],
+    outboundKind: 'calendar_block',
   },
   {
-    id: 'guesty' as const,
+    id: 'guesty',
     name: 'Guesty',
-    logo: 'https://www.guesty.com/wp-content/themes/guesty/img/logo.svg',
     description: 'Integrate with Guesty for seamless property and reservation management',
     features: ['Listing Sync', 'Reservation Sync', 'Calendar Management', 'Multi-channel Support'],
     setupUrl: 'https://open-api-docs.guesty.com/',
+    fields: [
+      { key: 'client_id', label: 'Client ID', placeholder: 'Guesty OAuth client ID' },
+      { key: 'client_secret', label: 'Client Secret', placeholder: 'Guesty OAuth client secret', secret: true },
+    ],
+    outboundKind: 'reservation',
+  },
+  {
+    id: 'hostaway',
+    name: 'Hostaway',
+    description: 'Connect Hostaway to sync listings, reservations, and calendars in real time',
+    features: ['Listing Sync', 'Reservation Push', 'Calendar Sync', 'Partner Channel (2020)'],
+    setupUrl: 'https://api.hostaway.com/documentation',
+    fields: [
+      { key: 'account_id', label: 'Account ID', placeholder: 'Hostaway Account ID' },
+      { key: 'api_key', label: 'API Key', placeholder: 'Hostaway API Key', secret: true },
+    ],
+    outboundKind: 'reservation',
   },
 ];
+
+function functionForProvider(provider: PMSProvider): string {
+  switch (provider) {
+    case 'ownerrez':
+      return 'pms-ownerrez-sync';
+    case 'hostaway':
+      return 'pms-hostaway-sync';
+    case 'guesty':
+    default:
+      return 'pms-guesty-sync';
+  }
+}
 
 export async function createPMSConnection(
   provider: PMSProvider,
@@ -177,6 +232,54 @@ export async function createPMSConnection(
 
   if (error) throw error;
   return data;
+}
+
+// Provider-aware connect: OwnerRez stores its token directly; Guesty/Hostaway
+// store the client credentials so the edge functions can mint short-lived tokens.
+export async function createProviderConnection(
+  provider: PMSProvider,
+  accountName: string,
+  values: Record<string, string>,
+  syncDirection: PMSSyncDirection = 'two_way'
+): Promise<PMSConnection> {
+  const { data: session } = await supabase.auth.getSession();
+  if (!session.session) throw new Error('Not authenticated');
+
+  const apiCredentials: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (value?.trim()) apiCredentials[key] = value.trim();
+  }
+
+  const oauthAccessToken =
+    provider === 'ownerrez' ? values.access_token?.trim() || null : null;
+
+  const { data, error } = await supabase
+    .from('pms_connections')
+    .insert({
+      user_id: session.session.user.id,
+      pms_provider: provider,
+      account_name: accountName || null,
+      oauth_access_token: oauthAccessToken,
+      api_credentials: apiCredentials,
+      sync_direction: syncDirection,
+      is_active: true,
+    })
+    .select(PMS_CONNECTION_COLUMNS)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function setPMSSyncDirection(
+  connectionId: string,
+  direction: PMSSyncDirection
+): Promise<void> {
+  const { error } = await supabase
+    .from('pms_connections')
+    .update({ sync_direction: direction })
+    .eq('id', connectionId);
+  if (error) throw error;
 }
 
 export async function getPMSConnections(): Promise<PMSConnection[]> {
@@ -209,9 +312,7 @@ export async function syncPMSProperties(connectionId: string): Promise<unknown> 
 
   if (!connection) throw new Error('Connection not found');
 
-  const functionName = connection.pms_provider === 'ownerrez'
-    ? 'pms-ownerrez-sync'
-    : 'pms-guesty-sync';
+  const functionName = functionForProvider(connection.pms_provider as PMSProvider);
 
   const payload = await invokePMSEdgeFunction(functionName, {
     action: 'sync_properties',
@@ -235,9 +336,7 @@ export async function syncPMSBookings(connectionId: string, propertyId?: string)
 
   if (!connection) throw new Error('Connection not found');
 
-  const functionName = connection.pms_provider === 'ownerrez'
-    ? 'pms-ownerrez-sync'
-    : 'pms-guesty-sync';
+  const functionName = functionForProvider(connection.pms_provider as PMSProvider);
 
   const { data, error } = await supabase.functions.invoke(functionName, {
     body: {
@@ -260,9 +359,7 @@ export async function syncPMSAvailability(connectionId: string, propertyId: stri
 
   if (!connection) throw new Error('Connection not found');
 
-  const functionName = connection.pms_provider === 'ownerrez'
-    ? 'pms-ownerrez-sync'
-    : 'pms-guesty-sync';
+  const functionName = functionForProvider(connection.pms_provider as PMSProvider);
 
   return invokePMSEdgeFunction(functionName, {
     action: 'sync_availability',
@@ -362,8 +459,8 @@ export async function syncAllPMS(connectionId: string): Promise<unknown> {
 
   if (!connection) throw new Error('Connection not found');
 
-  if (connection.pms_provider === 'ownerrez') {
-    return invokePMSEdgeFunction('pms-ownerrez-sync', {
+  if (connection.pms_provider === 'ownerrez' || connection.pms_provider === 'hostaway') {
+    return invokePMSEdgeFunction(functionForProvider(connection.pms_provider as PMSProvider), {
       action: 'sync_all',
       pmsConnectionId: connectionId,
     });
@@ -388,4 +485,106 @@ export async function togglePMSConnection(connectionId: string, isActive: boolea
     .eq('id', connectionId);
 
   if (error) throw error;
+}
+
+// --- Universal iCal channel --------------------------------------------------
+
+export interface HostProperty {
+  id: string;
+  title: string;
+  ical_export_token: string | null;
+}
+
+export interface ICalFeed {
+  id: string;
+  property_id: string;
+  label: string | null;
+  feed_url: string;
+  is_active: boolean;
+  last_imported_at: string | null;
+  last_import_status: 'success' | 'failed' | null;
+  last_import_error: string | null;
+  last_event_count: number;
+  created_at: string;
+}
+
+function supabaseFunctionsBase(): string {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\/rest\/v1\/?$/, '');
+  if (!supabaseUrl) throw new Error('StayLoop is missing Supabase configuration.');
+  return supabaseUrl;
+}
+
+export async function getHostProperties(): Promise<HostProperty[]> {
+  const { data: session } = await supabase.auth.getSession();
+  if (!session.session) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .from('properties')
+    .select('id, title, ical_export_token')
+    .eq('host_id', session.session.user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data as HostProperty[]) || [];
+}
+
+export function getICalExportUrl(property: HostProperty): string {
+  if (!property.ical_export_token) return '';
+  return `${supabaseFunctionsBase()}/functions/v1/channel-ical?action=export&property=${property.id}&token=${property.ical_export_token}`;
+}
+
+export async function getICalFeeds(propertyId?: string): Promise<ICalFeed[]> {
+  let query = supabase
+    .from('channel_ical_feeds')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (propertyId) query = query.eq('property_id', propertyId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data as ICalFeed[]) || [];
+}
+
+export async function addICalFeed(
+  propertyId: string,
+  feedUrl: string,
+  label?: string
+): Promise<ICalFeed> {
+  const { data: session } = await supabase.auth.getSession();
+  if (!session.session) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .from('channel_ical_feeds')
+    .insert({
+      property_id: propertyId,
+      user_id: session.session.user.id,
+      feed_url: feedUrl.trim(),
+      label: label?.trim() || null,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data as ICalFeed;
+}
+
+export async function deleteICalFeed(feedId: string): Promise<void> {
+  const { error } = await supabase.from('channel_ical_feeds').delete().eq('id', feedId);
+  if (error) throw error;
+}
+
+export async function importICalFeeds(propertyId?: string): Promise<unknown> {
+  return invokePMSEdgeFunction('channel-ical', {
+    action: 'import',
+    ...(propertyId ? { propertyId } : {}),
+  });
+}
+
+export async function testHostawayConnection(connectionId: string): Promise<string> {
+  const payload = await invokePMSEdgeFunction('pms-hostaway-sync', {
+    action: 'test_hostaway',
+    pmsConnectionId: connectionId,
+  });
+  const result = payload?.result as { listingCount?: number } | undefined;
+  return `Hostaway connection OK. Found ${result?.listingCount ?? 0} listing(s).`;
 }
