@@ -7,5 +7,11 @@ verify_jwt = false
 [functions.pms-webhook-receiver]
 verify_jwt = false
 
+[functions.pms-ownerrez-sync]
+verify_jwt = true
+
+[functions.pms-guesty-sync]
+verify_jwt = true
+
 [functions.send-email]
 verify_jwt = false

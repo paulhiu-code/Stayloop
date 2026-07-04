@@ -274,14 +274,68 @@ function AppContent() {
   }
 
   if (page === 'host-onboarding') {
+    if (!user) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 text-center">
+          <div className="max-w-md rounded-3xl border border-gray-200 bg-white p-8 shadow-xl">
+            <h1 className="text-2xl font-bold text-gray-900">Sign in required</h1>
+            <p className="mt-3 text-gray-600">Sign in to start Stripe host onboarding.</p>
+            <button
+              type="button"
+              onClick={() => openAuth('signin')}
+              className="mt-6 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white"
+            >
+              Sign in
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return <HostOnboarding onClose={() => navigate('home')} />;
   }
 
   if (page === 'host-dashboard') {
+    if (!user) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 text-center">
+          <div className="max-w-md rounded-3xl border border-gray-200 bg-white p-8 shadow-xl">
+            <h1 className="text-2xl font-bold text-gray-900">Sign in required</h1>
+            <p className="mt-3 text-gray-600">Sign in to view your Stripe host dashboard.</p>
+            <button
+              type="button"
+              onClick={() => openAuth('signin')}
+              className="mt-6 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white"
+            >
+              Sign in
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return <HostDashboard onClose={() => navigate('home')} />;
   }
 
   if (page === 'checkout') {
+    if (!user) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 text-center">
+          <div className="max-w-md rounded-3xl border border-gray-200 bg-white p-8 shadow-xl">
+            <h1 className="text-2xl font-bold text-gray-900">Sign in required</h1>
+            <p className="mt-3 text-gray-600">Sign in to complete your booking and payment.</p>
+            <button
+              type="button"
+              onClick={() => openAuth('signin')}
+              className="mt-6 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white"
+            >
+              Sign in
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return <CheckoutPage onClose={() => navigate('home')} />;
   }
 

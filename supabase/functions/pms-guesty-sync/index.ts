@@ -1,10 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
-};
+import { getCorsHeaders } from '../_shared/cors.ts';
 
 interface GuestyListing {
   _id: string;
@@ -56,7 +51,18 @@ function createServiceSupabaseClient() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
+function isServiceRoleRequest(req: Request): boolean {
+  const serviceRoleKey = getServiceRoleKey();
+  if (!serviceRoleKey) return false;
+  const authHeader = req.headers.get('Authorization') ?? '';
+  const apiKeyHeader = req.headers.get('apikey') ?? '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  return token === serviceRoleKey || apiKeyHeader === serviceRoleKey;
+}
+
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -65,6 +71,13 @@ Deno.serve(async (req: Request) => {
     const supabase = createServiceSupabaseClient();
 
     const { action, pmsConnectionId, listingId, webhookData }: SyncRequest = await req.json();
+
+    if (action === 'webhook' && !isServiceRoleRequest(req)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Webhook processing requires internal authorization' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     let authedUserId: string | null = null;
     if (action !== 'webhook') {
