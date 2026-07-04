@@ -43,6 +43,8 @@ StayLoop runs on **one Vercel project** (frontend + API):
 | `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Webhooks → signing secret |
 | `SUPABASE_URL` | Same as `VITE_SUPABASE_URL` |
 | `SUPABASE_ANON_KEY` | Same as `VITE_SUPABASE_ANON_KEY` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → **service_role** key. **Required** for transactional email dispatch (`server/email-dispatch.js` → `send-email` edge function). |
+| `CRON_SECRET` | Random secret shared with the Vercel cron that triggers booking-lifecycle emails (`POST/GET /api/cron/process-emails`). |
 | `SITE_URL` | `https://stay-loop.co` |
 | `ALLOWED_REDIRECT_ORIGINS` | `https://stay-loop.co,https://www.stay-loop.co` |
 
@@ -91,7 +93,18 @@ stripe listen --forward-to localhost:4000/api/stripe/webhook
 
 ## Email (Resend)
 
-Transactional email uses the `send-email` Supabase Edge Function. Configure Resend secrets in Supabase Edge Function settings. See existing email CMS migrations in `supabase/migrations/`.
+Transactional email flows through server code and a Supabase Edge Function:
+
+1. **Vercel server** — `server/email-dispatch.js` posts to the Supabase Edge Function `send-email`, authenticating with `SUPABASE_SERVICE_ROLE_KEY` (set on Vercel).
+2. **Supabase Edge Function** — `send-email` sends mail via Resend using secrets set in Supabase (`RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`), not in Vercel. Use `scripts/setup-email-supabase.sh` or configure them in the Supabase dashboard.
+
+**Without `SUPABASE_SERVICE_ROLE_KEY` on Vercel**, booking confirmations, receipts, referrals, payouts, welcome, and cancellation emails will fail at dispatch time.
+
+See existing email CMS migrations in `supabase/migrations/`.
+
+### Scheduled email (cron)
+
+Booking-lifecycle emails (check-in reminders, review requests) are driven by `POST/GET /api/cron/process-emails`, scheduled via a `crons` entry in `vercel.json` and protected by `CRON_SECRET` (or `EMAIL_CRON_SECRET`).
 
 ## Testing
 
