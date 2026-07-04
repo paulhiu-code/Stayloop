@@ -21,7 +21,7 @@ type OnboardingLinkResponse = {
 };
 
 export default function HostDashboard({ onClose }: { onClose: () => void }) {
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const [status, setStatus] = useState<AccountStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -46,6 +46,9 @@ export default function HostDashboard({ onClose }: { onClose: () => void }) {
         `/api/stripe/connect/account-status?accountId=${encodeURIComponent(accountId)}`
       );
       setStatus(nextStatus);
+      // The status call persists the latest stripe_* flags server-side; sync them into the client
+      // profile so the publish gate reflects reality without requiring a re-login.
+      await refreshProfile();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load Stripe account status.');
     } finally {

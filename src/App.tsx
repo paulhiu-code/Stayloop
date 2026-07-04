@@ -9,6 +9,8 @@ import HostsPage from './components/HostsPage';
 import PartnersPage from './components/PartnersPage';
 import HostOnboarding from './components/HostOnboarding';
 import HostDashboard from './components/HostDashboard';
+import BecomeHostHub from './components/host/BecomeHostHub';
+import ListingWizard from './components/host/ListingWizard';
 import CheckoutPage from './components/CheckoutPage';
 import AdminDashboard from './components/AdminDashboard';
 import ResetPasswordPage from './components/ResetPasswordPage';
@@ -73,12 +75,20 @@ function propertyIdFromPath(path: string): string | null {
   return match?.[1] || null;
 }
 
+function listingIdFromPath(path: string): string | null {
+  const match = path.match(/^\/host\/listing\/([^/]+)\/edit/);
+  return match?.[1] || null;
+}
+
 function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' {
   if (path === '/admin') return 'admin';
   if (path === '/reset-password') return 'reset-password';
   if (path === '/search' || path.startsWith('/search/')) return 'search';
   if (path === '/hosts') return 'hosts';
   if (path === '/partners') return 'partners';
+  if (path === '/become-a-host') return 'become-host';
+  if (path === '/host/new') return 'host-new';
+  if (listingIdFromPath(path)) return 'host-edit';
   if (path === '/host-onboarding') return 'host-onboarding';
   if (path === '/host-dashboard') return 'host-dashboard';
   if (path === '/checkout') return 'checkout';
@@ -98,6 +108,9 @@ function pathFromPage(
   }
   if (page === 'hosts') return '/hosts';
   if (page === 'partners') return '/partners';
+  if (page === 'become-host') return '/become-a-host';
+  if (page === 'host-new') return '/host/new';
+  if (page === 'host-edit') return propertyId ? `/host/listing/${propertyId}/edit` : '/become-a-host';
   if (page === 'host-onboarding') return '/host-onboarding';
   if (page === 'host-dashboard') return '/host-dashboard';
   if (page === 'checkout') {
@@ -116,6 +129,7 @@ function AppContent() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [propertyId, setPropertyId] = useState<string | null>(() => propertyIdFromPath(window.location.pathname));
+  const [listingId, setListingId] = useState<string | null>(() => listingIdFromPath(window.location.pathname));
   const marketCarouselRef = useRef<HTMLDivElement>(null);
   const { user, loading: authLoading, isAdmin, profile } = useAuth();
 
@@ -123,6 +137,7 @@ function AppContent() {
     const handlePopState = () => {
       setPage(pageFromPath(window.location.pathname));
       setPropertyId(propertyIdFromPath(window.location.pathname));
+      setListingId(listingIdFromPath(window.location.pathname));
       setSearchQuery(window.location.search);
     };
 
@@ -187,6 +202,11 @@ function AppContent() {
       setPropertyId(options.propertyId);
     } else if (nextPage !== 'property') {
       setPropertyId(null);
+    }
+    if (nextPage === 'host-edit' && options?.propertyId) {
+      setListingId(options.propertyId);
+    } else if (nextPage !== 'host-edit') {
+      setListingId(null);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -271,6 +291,67 @@ function AppContent() {
 
   if (page === 'partners') {
     return <PartnersPage onClose={() => navigate('home')} onNavigate={navigate} onShowAuth={() => openAuth('signup')} />;
+  }
+
+  if (page === 'become-host') {
+    if (!user) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 text-center">
+          <div className="max-w-md rounded-3xl border border-gray-200 bg-white p-8 shadow-xl">
+            <h1 className="text-2xl font-bold text-gray-900">Sign in to start hosting</h1>
+            <p className="mt-3 text-gray-600">Create your StayLoop account to list a place and get paid.</p>
+            <button
+              type="button"
+              onClick={() => openAuth('signup')}
+              className="mt-6 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white"
+            >
+              Sign in or sign up
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <BecomeHostHub
+        onExit={() => navigate('home')}
+        onNavigate={navigate}
+        onCreateListing={() => navigate('host-new')}
+        onEditListing={(id) => navigate('host-edit', { propertyId: id })}
+        onSetupPayouts={() => navigate('host-onboarding')}
+        onViewDashboard={() => navigate('host-dashboard')}
+      />
+    );
+  }
+
+  if (page === 'host-new' || page === 'host-edit') {
+    if (!user) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 text-center">
+          <div className="max-w-md rounded-3xl border border-gray-200 bg-white p-8 shadow-xl">
+            <h1 className="text-2xl font-bold text-gray-900">Sign in to create a listing</h1>
+            <p className="mt-3 text-gray-600">Sign in to build and publish your StayLoop listing.</p>
+            <button
+              type="button"
+              onClick={() => openAuth('signin')}
+              className="mt-6 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white"
+            >
+              Sign in
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <ListingWizard
+        key={page === 'host-edit' ? listingId ?? 'new' : 'new'}
+        listingId={page === 'host-edit' ? listingId ?? undefined : undefined}
+        onExit={() => navigate('become-host')}
+        onPublished={() => navigate('become-host')}
+        onSetupPayouts={() => navigate('host-onboarding')}
+      />
+    );
   }
 
   if (page === 'host-onboarding') {
@@ -367,7 +448,27 @@ function AppContent() {
   }
 
   if (showDashboard) {
-    return <Dashboard onClose={() => setShowDashboard(false)} />;
+    return (
+      <Dashboard
+        onClose={() => setShowDashboard(false)}
+        onCreateListing={() => {
+          setShowDashboard(false);
+          navigate('host-new');
+        }}
+        onEditListing={(id) => {
+          setShowDashboard(false);
+          navigate('host-edit', { propertyId: id });
+        }}
+        onBecomeHost={() => {
+          setShowDashboard(false);
+          navigate('become-host');
+        }}
+        onSetupPayouts={() => {
+          setShowDashboard(false);
+          navigate('host-onboarding');
+        }}
+      />
+    );
   }
 
   return (
@@ -378,6 +479,7 @@ function AppContent() {
         onNavigate={navigate}
         onShowAdmin={() => navigate('admin')}
         showAdminLink={isAdmin}
+        showHostLinks
       />
 
       <Hero onSearch={goToSearch} />

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import Header, { SitePage } from './Header';
 import AuthModal, { AuthMode } from './AuthModal';
+import { useAuth } from '../contexts/AuthContext';
 
 type HostsPageProps = {
   onClose: () => void;
@@ -43,12 +44,21 @@ const hostFeatures = [
 ];
 
 export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
+  const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('signup');
 
   function openAuth(mode: AuthMode = 'signup') {
     setAuthMode(mode);
     setShowAuth(true);
+  }
+
+  function startHosting() {
+    if (user) {
+      onNavigate('become-host');
+    } else {
+      openAuth('signup');
+    }
   }
 
   return (
@@ -79,10 +89,10 @@ export default function HostsPage({ onClose, onNavigate }: HostsPageProps) {
             </p>
             <div className="mt-10 flex flex-wrap gap-4">
               <button
-                onClick={() => openAuth('signup')}
+                onClick={startHosting}
                 className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 via-rose-500 to-orange-600 px-8 py-4 text-lg font-bold text-white shadow-xl transition hover:scale-105"
               >
-                Start listing
+                Start hosting
                 <ArrowRight className="h-5 w-5" />
               </button>
               <button
