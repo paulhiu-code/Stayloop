@@ -29,6 +29,11 @@ export type SearchResultProperty = Property & {
   nights?: number | null;
 };
 
+/** Escape PostgREST filter metacharacters in user-supplied search terms. */
+function escapePostgrestFilterTerm(term: string): string {
+  return term.replace(/[%_,().]/g, (char) => `\\${char}`);
+}
+
 export type SearchPropertiesResult = {
   properties: SearchResultProperty[];
   totalCount: number;
@@ -252,7 +257,7 @@ async function searchPropertiesFallback(filters: ReturnType<typeof normalizeFilt
   let query = supabase.from('properties').select('*', { count: 'exact' }).eq('is_active', true);
 
   if (filters.where?.trim()) {
-    const term = filters.where.trim();
+    const term = escapePostgrestFilterTerm(filters.where.trim());
     query = query.or(
       `title.ilike.%${term}%,city.ilike.%${term}%,state.ilike.%${term}%,description.ilike.%${term}%`
     );

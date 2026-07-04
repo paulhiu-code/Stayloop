@@ -34,18 +34,17 @@ export interface PMSConnection {
   pms_provider: PMSProvider;
   account_name: string | null;
   is_active: boolean;
-  oauth_access_token: string | null;
-  oauth_refresh_token: string | null;
   oauth_expires_at: string | null;
-  api_credentials: Record<string, unknown> | null;
   sync_settings: Record<string, unknown>;
   last_sync_at: string | null;
   sync_status: 'pending' | 'syncing' | 'completed' | 'failed';
   sync_error: string | null;
-  webhook_secret: string;
   created_at: string;
   updated_at: string;
 }
+
+const PMS_CONNECTION_COLUMNS =
+  'id, user_id, pms_provider, account_name, is_active, oauth_expires_at, sync_settings, last_sync_at, sync_status, sync_error, created_at, updated_at';
 
 export interface PMSPropertyMapping {
   id: string;
@@ -173,7 +172,7 @@ export async function createPMSConnection(
       api_credentials: apiCredentials ?? null,
       is_active: true,
     })
-    .select()
+    .select(PMS_CONNECTION_COLUMNS)
     .single();
 
   if (error) throw error;
@@ -183,7 +182,7 @@ export async function createPMSConnection(
 export async function getPMSConnections(): Promise<PMSConnection[]> {
   const { data, error } = await supabase
     .from('pms_connections')
-    .select('*')
+    .select(PMS_CONNECTION_COLUMNS)
     .order('created_at', { ascending: false });
 
   if (error) throw error;

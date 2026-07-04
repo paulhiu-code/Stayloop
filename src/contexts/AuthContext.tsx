@@ -77,26 +77,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error;
 
-      const pendingUserType = window.localStorage.getItem('stayloop_pending_user_type') as UserType | null;
-      if (data && pendingUserType && data.user_type !== pendingUserType) {
-        const { data: updatedProfile, error: updateError } = await supabase
-          .from('profiles')
-          .update({ user_type: pendingUserType })
-          .eq('id', userId)
-          .select('*')
-          .maybeSingle();
-
-        if (updateError) throw updateError;
-        window.localStorage.removeItem('stayloop_pending_user_type');
-        setProfile(updatedProfile);
-        requestWelcomeEmail();
-        return;
-      }
-
-      if (pendingUserType) {
-        window.localStorage.removeItem('stayloop_pending_user_type');
-      }
-
       setProfile(data);
       requestWelcomeEmail();
     } catch (error) {
@@ -146,7 +126,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .update({
         full_name: fullName,
         referred_by: referrerId,
-        user_type: userType,
       })
       .eq('id', authData.user.id);
 
@@ -177,14 +156,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signInWithOAuth(provider: OAuthProvider, userType?: UserType) {
-    if (userType) {
-      window.localStorage.setItem('stayloop_pending_user_type', userType);
-    }
-
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
         redirectTo: window.location.origin,
+        ...(userType ? { data: { user_type: userType } } : {}),
       },
     });
 

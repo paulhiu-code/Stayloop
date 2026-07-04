@@ -140,11 +140,13 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method === 'GET') {
+    if (!(await isAdminRequest(req))) {
+      return jsonResponse({ error: 'Unauthorized.' }, 401);
+    }
+
     return jsonResponse({
       ok: true,
       configured: isResendConfigured(),
-      from: getEmailFromAddress(),
-      replyTo: getEmailReplyToAddress() ?? null,
       provider: 'resend',
     });
   }

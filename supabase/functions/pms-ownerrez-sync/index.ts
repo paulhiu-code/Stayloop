@@ -62,6 +62,15 @@ function getServiceRoleKey(): string | undefined {
   return undefined;
 }
 
+function isServiceRoleRequest(req: Request): boolean {
+  const serviceRoleKey = getServiceRoleKey();
+  if (!serviceRoleKey) return false;
+  const authHeader = req.headers.get('Authorization') ?? '';
+  const apiKeyHeader = req.headers.get('apikey') ?? '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  return token === serviceRoleKey || apiKeyHeader === serviceRoleKey;
+}
+
 function createServiceSupabaseClient() {
   const supabaseUrl = Deno.env.get('STAYLOOP_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL');
   const serviceRoleKey = getServiceRoleKey();
@@ -650,6 +659,14 @@ Deno.serve(async (req: Request) => {
     const cronActions = new Set(['sync_all', 'sync_availability', 'sync_bookings']);
     const isCronJob =
       cronActions.has(action) && Boolean(cronSecret && providedCronSecret === cronSecret);
+    const isServiceRole = isServiceRoleRequest(req);
+
+    if (action === 'webhook' && !isServiceRole) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Webhook processing requires internal authorization' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     let authedUserId: string | null = null;
     if (action !== 'webhook' && !isCronJob) {
