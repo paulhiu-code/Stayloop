@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth, UserType } from '../contexts/AuthContext';
+import { getGoogleClientId, preloadGoogleSignIn } from '../lib/googleSignIn';
 
 export type AuthMode = 'signin' | 'signup';
 
@@ -28,6 +29,19 @@ function userTypeFromIntent(intent: JoinIntent): UserType {
   return intent === 'guest' ? 'guest' : 'both';
 }
 
+function StayLoopMark() {
+  return (
+    <div className="mb-6 flex items-center gap-3">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 text-lg font-extrabold text-white shadow-lg">
+        SL
+      </div>
+      <div>
+        <div className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-600">StayLoop</div>
+        <div className="text-sm text-gray-500">Trusted vacation rentals</div>
+      </div>
+    </div>
+  );
+}
 function GoogleLogo() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
@@ -58,6 +72,10 @@ function formatAuthError(err: unknown) {
     return 'Uppercase, lowercase letters, digits and symbols';
   }
 
+  if (message.toLowerCase().includes('cancelled')) {
+    return 'Google sign-in was cancelled. Try again when you are ready.';
+  }
+
   return message;
 }
 
@@ -81,6 +99,11 @@ export default function AuthModal({
 
   const { signIn, signUp, signInWithOAuth, resetPassword } = useAuth();
   const isForgotPassword = view === 'forgot';
+  const usesBrandedGoogleSignIn = Boolean(getGoogleClientId());
+
+  useEffect(() => {
+    preloadGoogleSignIn();
+  }, []);
 
   useEffect(() => {
     setView(initialMode);
@@ -122,8 +145,12 @@ export default function AuthModal({
     setLoading(true);
     try {
       await signInWithOAuth(provider, view === 'signup' ? userTypeFromIntent(joinIntent) : undefined);
+      if (usesBrandedGoogleSignIn) {
+        onClose();
+      }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'OAuth sign-in failed');
+      setError(formatAuthError(err));
+    } finally {
       setLoading(false);
     }
   }
@@ -158,6 +185,8 @@ export default function AuthModal({
         >
           <X className="w-6 h-6" />
         </button>
+
+        <StayLoopMark />
 
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
@@ -247,8 +276,13 @@ export default function AuthModal({
               className="flex w-full items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <GoogleLogo />
-              Continue with Google
+              {loading ? 'Connecting to Google...' : 'Continue with Google'}
             </button>
+            <p className="text-center text-xs text-gray-500">
+              {usesBrandedGoogleSignIn
+                ? 'Sign in securely with your Google account to continue to StayLoop.'
+                : 'You will be redirected to Google to sign in to StayLoop.'}
+            </p>
           </div>
 
           <div className="flex items-center gap-3">

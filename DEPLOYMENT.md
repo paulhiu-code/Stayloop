@@ -31,6 +31,7 @@ StayLoop runs on **one Vercel project** (frontend + API):
 | `VITE_SUPABASE_URL` | `https://xxxx.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | `eyJ...` |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | `pk_test_...` |
+| `VITE_GOOGLE_CLIENT_ID` | Google OAuth **Web client** ID (same as Supabase Auth → Google) |
 
 `VITE_API_BASE_URL` is **optional** on Vercel — the app calls `/api/...` on the same domain.
 
@@ -73,6 +74,25 @@ curl https://stay-loop.co/api/health/db
 Expected: `"status":"ok"`, `"stripeConfigured":true`, `"databaseConfigured":true`.
 
 Add your Vercel domain to Supabase Auth → URL configuration.
+
+## Google sign-in branding
+
+Without configuration, Google OAuth redirects through Supabase and shows `to continue to your-project.supabase.co`.
+
+StayLoop uses **Google Identity Services** on `stay-loop.co` when `VITE_GOOGLE_CLIENT_ID` is set. Google then shows your app name instead of the Supabase URL.
+
+1. **Supabase** → Authentication → Providers → Google → copy the **Client ID** (Web client).
+2. Set `VITE_GOOGLE_CLIENT_ID` in Vercel (Production + Preview) to that same value.
+3. **Google Cloud Console** → OAuth consent screen:
+   - App name: `StayLoop`
+   - App logo + support email
+   - Authorized domains: `stay-loop.co`
+4. **Google Cloud Console** → Credentials → your Web client:
+   - Authorized JavaScript origins: `https://stay-loop.co`, `http://localhost:5173`
+   - Authorized redirect URIs: keep Supabase callback (`https://<project-ref>.supabase.co/auth/v1/callback`) for fallback redirect sign-in
+5. Redeploy Vercel after adding the env var.
+
+Optional: Supabase **Custom domain** (e.g. `auth.stay-loop.co`) also improves email/auth link branding.
 
 ## Local development
 
