@@ -2,6 +2,439 @@
 @tailwind components;
 @tailwind utilities;
 
+/* -------------------------------------------------------------------------- */
+/* Theme tokens                                                               */
+/* -------------------------------------------------------------------------- */
+
+[data-theme='wander'] {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --color-page: 255 255 255;
+  --color-page-muted: 250 250 250;
+  --color-ink: 10 10 10;
+  --color-ink-muted: 115 115 115;
+  --color-ink-subtle: 163 163 163;
+  --color-ink-inverse: 255 255 255;
+
+  --color-brand: 10 10 10;
+  --color-brand-hover: 38 38 38;
+  --color-brand-foreground: 255 255 255;
+  --color-brand-soft: 245 245 245;
+
+  --color-accent: 245 245 245;
+  --color-accent-foreground: 10 10 10;
+
+  --color-border: 229 229 229;
+  --color-border-strong: 212 212 212;
+
+  --color-surface: 255 255 255;
+  --color-surface-elevated: 255 255 255;
+  --color-surface-inverse: 10 10 10;
+
+  --color-hero-bg: 10 10 10;
+  --color-hero-fg: 255 255 255;
+  --color-hero-muted: 163 163 163;
+
+  --color-success: 22 163 74;
+  --color-success-soft: 240 253 244;
+
+  --radius-card: 0.75rem;
+  --radius-modal: 1rem;
+  --radius-pill: 9999px;
+  --radius-control: 0.625rem;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-elevated: 0 12px 40px rgb(0 0 0 / 0.08);
+  --shadow-brand: none;
+}
+
+[data-theme='atlas'] {
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+
+  --color-page: 250 247 242;
+  --color-page-muted: 245 240 232;
+  --color-ink: 28 25 23;
+  --color-ink-muted: 87 83 78;
+  --color-ink-subtle: 120 113 108;
+  --color-ink-inverse: 255 255 255;
+
+  --color-brand: 184 92 56;
+  --color-brand-hover: 154 76 45;
+  --color-brand-foreground: 255 255 255;
+  --color-brand-soft: 251 236 226;
+
+  --color-accent: 61 90 76;
+  --color-accent-foreground: 255 255 255;
+
+  --color-border: 231 223 211;
+  --color-border-strong: 214 201 186;
+
+  --color-surface: 255 255 255;
+  --color-surface-elevated: 255 253 249;
+  --color-surface-inverse: 28 25 23;
+
+  --color-hero-bg: 28 25 23;
+  --color-hero-fg: 255 255 255;
+  --color-hero-muted: 214 201 186;
+
+  --color-success: 61 90 76;
+  --color-success-soft: 236 244 238;
+
+  --radius-card: 1.5rem;
+  --radius-modal: 1.5rem;
+  --radius-pill: 9999px;
+  --radius-control: 0.875rem;
+
+  --shadow-card: 0 8px 30px rgb(120 53 15 / 0.08);
+  --shadow-elevated: 0 20px 50px rgb(120 53 15 / 0.12);
+  --shadow-brand: 0 10px 30px rgb(184 92 56 / 0.22);
+}
+
+/* Classic = the current/live StayLoop design (orange + rose, bright surfaces). */
+[data-theme='classic'] {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  --color-page: 249 250 251;
+  --color-page-muted: 243 244 246;
+  --color-ink: 17 24 39;
+  --color-ink-muted: 75 85 99;
+  --color-ink-subtle: 156 163 175;
+  --color-ink-inverse: 255 255 255;
+
+  --color-brand: 249 115 22;
+  --color-brand-hover: 234 88 12;
+  --color-brand-foreground: 255 255 255;
+  --color-brand-soft: 255 247 237;
+
+  --color-accent: 244 63 94;
+  --color-accent-foreground: 255 255 255;
+
+  --color-border: 229 231 235;
+  --color-border-strong: 209 213 219;
+
+  --color-surface: 255 255 255;
+  --color-surface-elevated: 255 255 255;
+  --color-surface-inverse: 17 24 39;
+
+  --color-hero-bg: 2 6 23;
+  --color-hero-fg: 255 255 255;
+  --color-hero-muted: 203 213 225;
+
+  --color-success: 16 185 129;
+  --color-success-soft: 236 253 245;
+
+  --radius-card: 2rem;
+  --radius-modal: 1.5rem;
+  --radius-pill: 9999px;
+  --radius-control: 0.75rem;
+
+  --shadow-card: 0 10px 25px rgb(0 0 0 / 0.08);
+  --shadow-elevated: 0 25px 50px rgb(0 0 0 / 0.15);
+  --shadow-brand: 0 10px 25px rgb(249 115 22 / 0.25);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Base                                                                       */
+/* -------------------------------------------------------------------------- */
+
+@layer base {
+  html {
+    @apply scroll-smooth antialiased;
+  }
+
+  body {
+    @apply bg-page font-sans text-ink;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Theme visibility helpers                                                   */
+/* -------------------------------------------------------------------------- */
+
+[data-theme='wander'] .theme-atlas-only {
+  display: none !important;
+}
+
+[data-theme='atlas'] .theme-wander-only, [data-theme='classic'] .theme-wander-only {
+  display: none !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Component primitives                                                       */
+/* -------------------------------------------------------------------------- */
+
+@layer components {
+  .page-shell {
+    @apply min-h-screen bg-page text-ink;
+  }
+
+  .section-label {
+    @apply text-sm font-medium text-ink-muted;
+  }
+
+  [data-theme='atlas'] .section-label, [data-theme='classic'] .section-label {
+    @apply text-xs font-bold uppercase tracking-[0.24em] text-brand;
+  }
+
+  .section-title {
+    @apply font-display text-3xl font-semibold tracking-tight text-ink sm:text-4xl;
+  }
+
+  [data-theme='atlas'] .section-title, [data-theme='classic'] .section-title {
+    @apply font-sans text-4xl font-extrabold;
+  }
+
+  .section-copy {
+    @apply text-base leading-7 text-ink-muted;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-control bg-brand px-5 py-3 text-sm font-semibold text-brand-foreground transition hover:bg-brand-hover;
+  }
+
+  [data-theme='atlas'] .btn-primary, [data-theme='classic'] .btn-primary {
+    @apply rounded-pill bg-gradient-to-r from-brand to-accent font-bold shadow-brand hover:opacity-95;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-control border border-border bg-surface px-5 py-3 text-sm font-semibold text-ink transition hover:border-border-strong hover:bg-page-muted;
+  }
+
+  [data-theme='atlas'] .btn-secondary, [data-theme='classic'] .btn-secondary {
+    @apply rounded-pill;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-control px-4 py-2.5 text-sm font-semibold text-ink-muted transition hover:bg-page-muted hover:text-ink;
+  }
+
+  .card-surface {
+    @apply rounded-card border border-border bg-surface shadow-card;
+  }
+
+  [data-theme='atlas'] .card-surface, [data-theme='classic'] .card-surface {
+    @apply shadow-elevated;
+  }
+
+  .header-shell {
+    @apply sticky top-0 z-50 border-b border-border bg-surface/95 backdrop-blur-xl;
+  }
+
+  [data-theme='wander'] .header-shell {
+    @apply shadow-none;
+  }
+
+  [data-theme='atlas'] .header-shell, [data-theme='classic'] .header-shell {
+    @apply shadow-sm shadow-brand/5;
+  }
+
+  .logo-mark {
+    @apply flex h-10 w-10 items-center justify-center rounded-control bg-brand text-brand-foreground transition;
+  }
+
+  [data-theme='atlas'] .logo-mark, [data-theme='classic'] .logo-mark {
+    @apply rounded-2xl bg-gradient-to-br from-brand to-accent shadow-brand;
+  }
+
+  .logo-wordmark {
+    @apply text-xl font-semibold tracking-tight text-ink;
+  }
+
+  [data-theme='atlas'] .logo-wordmark, [data-theme='classic'] .logo-wordmark {
+    @apply font-sans text-[1.35rem] font-extrabold;
+  }
+
+  .logo-tagline {
+    @apply text-xs text-ink-muted;
+  }
+
+  [data-theme='atlas'] .logo-tagline, [data-theme='classic'] .logo-tagline {
+    @apply text-[0.66rem] font-semibold;
+  }
+
+  .nav-link {
+    @apply text-sm font-medium text-ink-muted transition hover:text-ink;
+  }
+
+  [data-theme='atlas'] .nav-link, [data-theme='classic'] .nav-link {
+    @apply font-semibold text-ink-muted hover:text-brand;
+  }
+
+  .property-card {
+    @apply cursor-pointer overflow-hidden rounded-card border border-border bg-surface text-left shadow-card transition hover:border-border-strong hover:shadow-elevated;
+  }
+
+  [data-theme='atlas'] .property-card, [data-theme='classic'] .property-card {
+    @apply rounded-[2rem] border-border hover:border-brand/40 hover:-translate-y-1;
+  }
+
+  .property-card-image {
+    @apply aspect-[4/3] w-full object-cover transition duration-500 group-hover:scale-[1.03];
+  }
+
+  [data-theme='atlas'] .property-card-image, [data-theme='classic'] .property-card-image {
+    @apply group-hover:scale-110;
+  }
+
+  .search-shell {
+    @apply rounded-[1.25rem] border border-border bg-surface p-2 shadow-elevated;
+  }
+
+  [data-theme='atlas'] .search-shell, [data-theme='classic'] .search-shell {
+    @apply rounded-[2rem] border-border-strong shadow-elevated;
+  }
+
+  [data-theme='wander'] .search-shell-hero {
+    @apply border-border bg-surface shadow-elevated;
+  }
+
+  [data-theme='atlas'] .search-shell-hero, [data-theme='classic'] .search-shell-hero {
+    @apply border-white/40 bg-white/95 shadow-2xl shadow-black/20 backdrop-blur-xl;
+  }
+
+  .search-field {
+    @apply flex cursor-text items-center gap-3 px-4 py-3 text-left transition hover:bg-page-muted;
+  }
+
+  .search-label {
+    @apply block text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-ink-subtle;
+  }
+
+  .search-value {
+    @apply mt-1 block text-sm font-medium text-ink;
+  }
+
+  .pill-filter {
+    @apply rounded-pill border border-border bg-surface px-4 py-2 text-sm font-medium text-ink-muted transition hover:border-border-strong hover:text-ink;
+  }
+
+  .pill-filter-active {
+    @apply border-brand bg-brand text-brand-foreground;
+  }
+
+  [data-theme='atlas'] .pill-filter-active, [data-theme='classic'] .pill-filter-active {
+    @apply border-brand bg-brand-soft text-brand ring-2 ring-brand/20;
+  }
+
+  [data-theme='wander'] .pill-filter-hero {
+    @apply border-border bg-page-muted text-ink hover:border-border-strong;
+  }
+
+  [data-theme='wander'] .pill-filter-hero.pill-filter-active {
+    @apply border-brand bg-brand text-brand-foreground;
+  }
+
+  [data-theme='atlas'] .pill-filter-hero, [data-theme='classic'] .pill-filter-hero {
+    @apply border-white/15 bg-white/10 text-white hover:border-brand/40 hover:bg-brand/20;
+  }
+
+  [data-theme='atlas'] .pill-filter-hero.pill-filter-active, [data-theme='classic'] .pill-filter-hero.pill-filter-active {
+    @apply border-brand/60 bg-brand/30 text-white ring-2 ring-brand/30;
+  }
+
+  .hero-shell {
+    @apply relative overflow-hidden bg-hero text-hero-foreground;
+  }
+
+  .hero-overlay {
+    @apply absolute inset-0 bg-black/55;
+  }
+
+  [data-theme='atlas'] .hero-overlay, [data-theme='classic'] .hero-overlay {
+    @apply bg-[radial-gradient(circle_at_top_left,rgba(184,92,56,0.18),transparent_34%),linear-gradient(90deg,rgba(28,25,23,0.82)_0%,rgba(28,25,23,0.45)_50%,rgba(28,25,23,0.08)_100%)];
+  }
+
+  .hero-title {
+    @apply font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl;
+  }
+
+  [data-theme='atlas'] .hero-title, [data-theme='classic'] .hero-title {
+    @apply font-display drop-shadow-[0_3px_18px_rgba(28,25,23,0.45)];
+  }
+
+  [data-theme='wander'] .hero-title {
+    @apply font-sans font-semibold;
+  }
+
+  .hero-copy {
+    @apply max-w-2xl text-lg leading-8 text-hero-muted sm:text-xl;
+  }
+
+  [data-theme='atlas'] .hero-copy, [data-theme='classic'] .hero-copy {
+    @apply text-hero-foreground/90;
+  }
+
+  .hero-badge {
+    @apply inline-flex items-center gap-2 rounded-pill border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-hero-foreground backdrop-blur;
+  }
+
+  [data-theme='atlas'] .hero-badge, [data-theme='classic'] .hero-badge {
+    @apply font-semibold text-brand-soft;
+  }
+
+  .feature-tile {
+    @apply rounded-card border border-border bg-surface p-6;
+  }
+
+  [data-theme='atlas'] .feature-tile, [data-theme='classic'] .feature-tile {
+    @apply rounded-[2rem] border-white/15 bg-surface-inverse/65 text-hero-foreground backdrop-blur;
+  }
+
+  .market-card {
+    @apply min-w-[260px] snap-start overflow-hidden rounded-card bg-surface-inverse text-left shadow-elevated transition hover:shadow-elevated sm:min-w-[320px];
+  }
+
+  [data-theme='atlas'] .market-card, [data-theme='classic'] .market-card {
+    @apply rounded-[2rem] hover:-translate-y-1;
+  }
+
+  [data-theme='wander'] .market-card {
+    @apply hover:-translate-y-0.5;
+  }
+
+  .footer-shell {
+    @apply relative mt-24 overflow-hidden border-t border-border bg-surface-inverse text-ink-inverse;
+  }
+
+  [data-theme='atlas'] .footer-shell, [data-theme='classic'] .footer-shell {
+    @apply mt-32 bg-gradient-to-br from-surface-inverse via-stone-800 to-surface-inverse;
+  }
+
+  .input-field {
+    @apply w-full rounded-control border border-border bg-surface px-4 py-3 text-ink transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20;
+  }
+
+  .modal-shell {
+    @apply rounded-modal bg-surface p-6 shadow-elevated sm:p-8;
+  }
+
+  .skeleton-block {
+    @apply animate-pulse rounded-card bg-page-muted;
+  }
+
+  [data-theme='wander'] .theme-switcher .btn-primary,
+  [data-theme='wander'] .theme-switcher .btn-secondary {
+    @apply rounded-xl;
+  }
+
+  /* Classic tweaks: keep the original squared buttons, bold hero, neutral footer. */
+  [data-theme='classic'] .btn-primary,
+  [data-theme='classic'] .btn-secondary {
+    @apply rounded-control;
+  }
+
+  [data-theme='classic'] .hero-title {
+    @apply font-extrabold;
+  }
+
+  [data-theme='classic'] .footer-shell {
+    @apply bg-surface-inverse;
+  }
+}
+
 @layer utilities {
   .animate-blob {
     animation: blob 7s infinite;
@@ -31,7 +464,8 @@
 }
 
 @keyframes blob {
-  0%, 100% {
+  0%,
+  100% {
     transform: translate(0px, 0px) scale(1);
   }
   33% {

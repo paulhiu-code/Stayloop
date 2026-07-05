@@ -19,14 +19,8 @@ export default function CategoryPills({
     <div className={`flex flex-wrap ${isHero ? 'gap-3' : 'gap-2'} ${className}`}>
       {stayCategories.map((category) => {
         const isActive = activeCategory === category;
-
-        const buttonClass = isHero
-          ? isActive
-            ? 'border-orange-300 bg-orange-400/30 text-white ring-2 ring-orange-300/50'
-            : 'border-white/15 bg-white/10 text-white hover:border-orange-300 hover:bg-orange-400/20'
-          : isActive
-            ? 'border-orange-400 bg-orange-50 text-orange-800 ring-2 ring-orange-200'
-            : 'border-orange-200 bg-white text-gray-700 hover:border-orange-400 hover:bg-orange-50';
+        const heroClass = isHero ? 'pill-filter-hero' : '';
+        const activeClass = isActive ? 'pill-filter-active' : '';
 
         return (
           <button
@@ -34,7 +28,7 @@ export default function CategoryPills({
             type="button"
             aria-pressed={isActive}
             onClick={() => onSelect(category)}
-            className={`rounded-full border px-4 py-2 text-sm font-semibold backdrop-blur transition ${buttonClass}`}
+            className={`pill-filter ${heroClass} ${activeClass}`}
           >
             {category}
           </button>

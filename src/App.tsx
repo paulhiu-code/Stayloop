@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import ThemeSwitcher from './components/ThemeSwitcher';
 import Header, { SitePage } from './components/Header';
 import Hero from './components/Hero';
 import PropertyCard from './components/PropertyCard';
@@ -13,10 +14,12 @@ import CheckoutPage from './components/CheckoutPage';
 import AdminDashboard from './components/AdminDashboard';
 import ResetPasswordPage from './components/ResetPasswordPage';
 import PropertyDetailPage from './components/PropertyDetailPage';
+import VariationsPage from './components/VariationsPage';
 import { supabase, Property } from './lib/supabase';
 import { showcaseProperties } from './data/showcase';
 import { searchProperties, type SearchFilters } from './lib/search';
 import { buildSearchPath, parseSearchParams } from './lib/searchUrl';
+import { withThemeParam } from './themes/url';
 import { normalizeAmenities } from './lib/property';
 import SearchResultsPage from './components/search/SearchResultsPage';
 
@@ -73,8 +76,9 @@ function propertyIdFromPath(path: string): string | null {
   return match?.[1] || null;
 }
 
-function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' {
+function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' | 'demo' {
   if (path === '/admin') return 'admin';
+  if (path === '/demo') return 'demo';
   if (path === '/reset-password') return 'reset-password';
   if (path === '/search' || path.startsWith('/search/')) return 'search';
   if (path === '/hosts') return 'hosts';
@@ -87,11 +91,12 @@ function pageFromPath(path: string): SitePage | 'reset-password' | 'admin' {
 }
 
 function pathFromPage(
-  page: SitePage | 'reset-password' | 'admin',
+  page: SitePage | 'reset-password' | 'admin' | 'demo',
   propertyId?: string,
   searchQuery?: string
 ) {
   if (page === 'admin') return '/admin';
+  if (page === 'demo') return '/demo';
   if (page === 'reset-password') return '/reset-password';
   if (page === 'search') {
     return searchQuery ? `/search?${searchQuery}` : '/search';
@@ -111,7 +116,7 @@ function AppContent() {
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [showDashboard, setShowDashboard] = useState(false);
-  const [page, setPage] = useState<SitePage | 'reset-password' | 'admin'>(() => pageFromPath(window.location.pathname));
+  const [page, setPage] = useState<SitePage | 'reset-password' | 'admin' | 'demo'>(() => pageFromPath(window.location.pathname));
   const [searchQuery, setSearchQuery] = useState(() => window.location.search);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,7 +142,7 @@ function AppContent() {
   }, [page]);
 
   function goToSearch(filters: SearchFilters) {
-    const path = buildSearchPath({ ...filters, page: 1 });
+    const path = withThemeParam(buildSearchPath({ ...filters, page: 1 }));
     window.history.pushState({}, '', path);
     setSearchQuery(window.location.search);
     setPage('search');
@@ -173,14 +178,15 @@ function AppContent() {
     }
   }
 
-  function navigate(nextPage: SitePage | 'reset-password' | 'admin', options?: { propertyId?: string; path?: string }) {
-    const path =
+  function navigate(nextPage: SitePage | 'reset-password' | 'admin' | 'demo', options?: { propertyId?: string; path?: string }) {
+    const path = withThemeParam(
       options?.path ||
-      (nextPage === 'admin'
-        ? '/admin'
-        : nextPage === 'reset-password'
-          ? '/reset-password'
-          : pathFromPage(nextPage, options?.propertyId));
+        (nextPage === 'admin'
+          ? '/admin'
+          : nextPage === 'reset-password'
+            ? '/reset-password'
+            : pathFromPage(nextPage, options?.propertyId))
+    );
     window.history.pushState({}, '', path);
     setPage(nextPage);
     if (nextPage === 'property' && options?.propertyId) {
@@ -212,10 +218,10 @@ function AppContent() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
+      <div className="page-shell flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading...</p>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-brand border-t-transparent" />
+          <p className="font-medium text-ink-muted">Loading...</p>
         </div>
       </div>
     );
@@ -231,7 +237,7 @@ function AppContent() {
             <button
               type="button"
               onClick={() => openAuth('signin')}
-              className="mt-6 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white"
+              className="btn-primary mt-6"
             >
               Sign in
             </button>
@@ -249,7 +255,7 @@ function AppContent() {
             <button
               type="button"
               onClick={() => navigate('home')}
-              className="mt-6 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white"
+              className="btn-primary mt-6"
             >
               Back to homepage
             </button>
@@ -259,6 +265,10 @@ function AppContent() {
     }
 
     return <AdminDashboard onClose={() => navigate('home')} adminEmail={profile?.email} />;
+  }
+
+  if (page === 'demo') {
+    return <VariationsPage onEnterHome={() => navigate('home')} />;
   }
 
   if (page === 'reset-password') {
@@ -371,7 +381,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="page-shell">
       <Header
         onShowAuth={openAuth}
         onShowDashboard={() => setShowDashboard(true)}
@@ -382,46 +392,38 @@ function AppContent() {
 
       <Hero onSearch={goToSearch} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="flex items-center justify-between mb-8">
+      <main className="mx-auto max-w-content px-4 py-16 sm:px-6 lg:px-8">
+        <div className="mb-8 flex items-center justify-between">
           <div>
-            <p className="mb-3 text-sm font-bold uppercase tracking-[0.24em] text-orange-600">
-              Featured stays
-            </p>
-            <h2 className="text-4xl font-extrabold text-gray-900 mb-2">
-              Curated places guests can book next
-            </h2>
-            <p className="text-gray-600">
+            <p className="section-label">Featured stays</p>
+            <h2 className="section-title mt-3 mb-2">Curated places guests can book next</h2>
+            <p className="section-copy">
               Entire homes, hotel rooms, cabins, and unique stays with a professional booking flow.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => goToSearch({ guests: 1 })}
-            className="hidden rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:from-orange-600 hover:to-rose-600 md:inline-flex"
-          >
+          <button type="button" onClick={() => goToSearch({ guests: 1 })} className="btn-primary hidden md:inline-flex">
             Search all stays
           </button>
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="animate-pulse">
-                <div className="aspect-[4/3] bg-gray-200 rounded-2xl mb-4"></div>
-                <div className="h-6 bg-gray-200 rounded mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+              <div key={i}>
+                <div className="skeleton-block mb-4 aspect-[4/3]" />
+                <div className="skeleton-block mb-2 h-6" />
+                <div className="skeleton-block h-4 w-2/3" />
               </div>
             ))}
           </div>
         ) : properties.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             {properties.map((property) => (
               <PropertyCard key={property.id} property={property} onViewStay={viewProperty} />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             {showcaseProperties.map((property) => (
               <PropertyCard key={property.id} property={property} />
             ))}
@@ -429,29 +431,27 @@ function AppContent() {
         )}
       </main>
 
-      <section className="bg-white py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="border-t border-border bg-surface py-20">
+        <div className="mx-auto max-w-content px-4 sm:px-6 lg:px-8">
           <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">Featured markets</p>
-              <h2 className="mt-4 max-w-2xl text-4xl font-extrabold tracking-tight text-gray-900">
-                Explore stays in guest-favorite destinations.
-              </h2>
-              <p className="mt-4 max-w-2xl text-lg leading-8 text-gray-600">
+              <p className="section-label">Featured markets</p>
+              <h2 className="section-title mt-4 max-w-2xl">Explore stays in guest-favorite destinations.</h2>
+              <p className="section-copy mt-4 max-w-2xl">
                 From mountain cabins to Gulf Coast beach houses, browse top markets travelers search for again and again.
               </p>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => scrollMarkets('left')}
-                className="flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-2xl font-bold text-gray-900 shadow-lg transition hover:bg-gray-50"
+                className="btn-secondary !h-12 !w-12 !rounded-full !p-0"
                 aria-label="Scroll markets left"
               >
                 ‹
               </button>
               <button
                 onClick={() => scrollMarkets('right')}
-                className="flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-2xl font-bold text-gray-900 shadow-lg transition hover:bg-gray-50"
+                className="btn-secondary !h-12 !w-12 !rounded-full !p-0"
                 aria-label="Scroll markets right"
               >
                 ›
@@ -459,25 +459,22 @@ function AppContent() {
             </div>
           </div>
 
-          <div
-            ref={marketCarouselRef}
-            className="scrollbar-hide -mx-4 flex snap-x gap-5 overflow-x-auto px-4 pb-6"
-          >
+          <div ref={marketCarouselRef} className="scrollbar-hide -mx-4 flex snap-x gap-5 overflow-x-auto px-4 pb-6">
             {featuredMarkets.map((market) => (
               <button
                 key={market.title}
                 onClick={() => goToSearch({ where: market.title, guests: 1 })}
-                className="group min-w-[260px] snap-start overflow-hidden rounded-[2rem] bg-gray-950 text-left shadow-xl transition hover:-translate-y-1 hover:shadow-2xl sm:min-w-[320px]"
+                className="market-card group"
               >
                 <div className="relative h-72 overflow-hidden">
                   <img
                     src={market.image}
                     alt={market.title}
-                    className="h-full w-full object-cover opacity-85 transition duration-700 group-hover:scale-110"
+                    className="h-full w-full object-cover opacity-90 transition duration-700 group-hover:scale-105"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent"></div>
-                  <div className="absolute bottom-0 p-6 text-white">
-                    <h3 className="text-2xl font-extrabold">{market.title}</h3>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+                  <div className="absolute bottom-0 p-6 text-left text-ink-inverse">
+                    <h3 className="text-2xl font-semibold">{market.title}</h3>
                     <p className="mt-2 text-sm leading-6 text-white/85">{market.stays}</p>
                   </div>
                 </div>
@@ -487,16 +484,14 @@ function AppContent() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-rose-50 to-white py-20">
-        <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-orange-200 blur-3xl opacity-50"></div>
-        <div className="absolute -right-20 bottom-0 h-72 w-72 rounded-full bg-rose-200 blur-3xl opacity-50"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="theme-atlas-only relative overflow-hidden bg-page-muted py-20">
+        <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-brand/10 blur-3xl" />
+        <div className="absolute -right-20 bottom-0 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+        <div className="relative mx-auto max-w-content px-4 sm:px-6 lg:px-8">
           <div className="mb-10 max-w-3xl">
-            <p className="text-sm font-bold uppercase tracking-[0.24em] text-orange-600">StayLoop Care</p>
-            <h2 className="mt-4 text-4xl font-extrabold text-gray-900">
-              Book with the confidence every great trip deserves.
-            </h2>
-            <p className="mt-5 text-lg leading-8 text-gray-600">
+            <p className="section-label">StayLoop Care</p>
+            <h2 className="section-title mt-4">Book with the confidence every great trip deserves.</h2>
+            <p className="section-copy mt-5">
               StayLoop Care brings the practical reassurance guests look for before choosing a place to stay.
             </p>
           </div>
@@ -507,63 +502,70 @@ function AppContent() {
               ['Clear total pricing', 'See nightly rates, cleaning fees, and guest fees before you decide to book.'],
               ['Stay details in one place', 'Keep saved favorites, check-in notes, house rules, and trip updates easy to find.'],
             ].map(([title, copy]) => (
-              <div key={title} className="rounded-[2rem] border border-orange-100 bg-white/85 p-8 shadow-xl backdrop-blur">
-                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 text-2xl font-extrabold text-white shadow-lg">
+              <div key={title} className="card-surface p-8">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-2xl font-bold text-brand-foreground shadow-brand">
                   ✓
                 </div>
-                <h3 className="text-2xl font-extrabold text-gray-900">{title}</h3>
-                <p className="mt-4 leading-7 text-gray-600">{copy}</p>
+                <h3 className="text-2xl font-semibold text-ink">{title}</h3>
+                <p className="mt-4 leading-7 text-ink-muted">{copy}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <footer className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white mt-32 overflow-hidden">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMiI+PHBhdGggZD0iTTM2IDE4YzAtNi42MjcgNS4zNzMtMTIgMTItMTJzMTIgNS4zNzMgMTIgMTItNS4zNzMgMTItMTIgMTItMTItNS4zNzMtMTItMTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-50"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
+      <section className="theme-wander-only border-t border-border bg-page-muted py-20">
+        <div className="mx-auto max-w-content px-4 sm:px-6 lg:px-8">
+          <div className="mb-10 max-w-3xl">
+            <p className="section-label">The StayLoop difference</p>
+            <h2 className="section-title mt-4">The quality of a luxury hotel. The comfort of a vacation home.</h2>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-3">
+            {[
+              ['Real trip support', 'Get help before, during, and after your stay when questions or travel changes come up.'],
+              ['Clear total pricing', 'See nightly rates, cleaning fees, and guest fees before you decide to book.'],
+              ['Stay details in one place', 'Keep saved favorites, check-in notes, house rules, and trip updates easy to find.'],
+            ].map(([title, copy]) => (
+              <div key={title} className="card-surface p-8">
+                <h3 className="text-lg font-semibold text-ink">{title}</h3>
+                <p className="mt-3 leading-7 text-ink-muted">{copy}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <footer className="footer-shell">
+        <div className="relative mx-auto max-w-content px-4 py-20 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 gap-12 md:grid-cols-4">
             <div className="col-span-1 md:col-span-2">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 via-rose-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-xl">
-                  <span className="text-white font-bold text-2xl">S</span>
+              <div className="mb-6 flex items-center gap-3">
+                <div className="logo-mark !h-12 !w-12">
+                  <span className="text-xl font-bold">S</span>
                 </div>
-                <span className="text-3xl font-extrabold">StayLoop</span>
+                <span className="text-3xl font-semibold">StayLoop</span>
               </div>
-              <p className="text-gray-400 mb-8 leading-relaxed text-lg">
-                Book unique vacation rentals, homes, and experiences around the world.
-                Your perfect stay is just a click away.
+              <p className="mb-8 text-lg leading-relaxed text-white/60">
+                Book unique vacation rentals, homes, and experiences around the world. Your perfect stay is just a click away.
               </p>
-              <div className="flex gap-3">
-                <button className="w-11 h-11 bg-gray-800/50 hover:bg-orange-500 border border-gray-700 hover:border-orange-400 rounded-xl flex items-center justify-center transition-all duration-300 transform hover:scale-110 shadow-lg hover:shadow-orange-500/20">
-                  <span className="sr-only">Twitter</span>
-                  𝕏
-                </button>
-                <button className="w-11 h-11 bg-gray-800/50 hover:bg-orange-500 border border-gray-700 hover:border-orange-400 rounded-xl flex items-center justify-center transition-all duration-300 transform hover:scale-110 shadow-lg hover:shadow-orange-500/20">
-                  <span className="sr-only">Facebook</span>f
-                </button>
-                <button className="w-11 h-11 bg-gray-800/50 hover:bg-orange-500 border border-gray-700 hover:border-orange-400 rounded-xl flex items-center justify-center transition-all duration-300 transform hover:scale-110 shadow-lg hover:shadow-orange-500/20">
-                  <span className="sr-only">Instagram</span>
-                  📷
-                </button>
-              </div>
             </div>
 
             <div>
-              <h3 className="font-bold text-xl mb-5 text-white">Company</h3>
+              <h3 className="mb-5 text-xl font-semibold">Company</h3>
               <ul className="space-y-3">
                 <li>
-                  <button onClick={() => navigate('home')} className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
+                  <button onClick={() => navigate('home')} className="text-white/60 transition hover:text-white">
                     About StayLoop
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => goToSearch({ guests: 1 })} className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
+                  <button onClick={() => goToSearch({ guests: 1 })} className="text-white/60 transition hover:text-white">
                     Search stays
                   </button>
                 </li>
                 <li>
-                  <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
+                  <a href="#" className="text-white/60 transition hover:text-white">
                     Blog
                   </a>
                 </li>
@@ -571,25 +573,20 @@ function AppContent() {
             </div>
 
             <div>
-              <h3 className="font-bold text-xl mb-5 text-white">Support</h3>
+              <h3 className="mb-5 text-xl font-semibold">Support</h3>
               <ul className="space-y-3">
                 <li>
-                  <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
+                  <a href="#" className="text-white/60 transition hover:text-white">
                     Help Center
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
+                  <a href="#" className="text-white/60 transition hover:text-white">
                     Safety
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
-                    Cancellation
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200">
+                  <a href="#" className="text-white/60 transition hover:text-white">
                     Contact Us
                   </a>
                 </li>
@@ -597,19 +594,14 @@ function AppContent() {
             </div>
           </div>
 
-          <div className="border-t border-gray-700/50 mt-16 pt-10 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-gray-400 text-base">
-              © 2025 StayLoop. All rights reserved.
-            </p>
+          <div className="mt-16 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-10 md:flex-row">
+            <p className="text-white/60">© 2025 StayLoop. All rights reserved.</p>
             <div className="flex gap-8 text-base">
-              <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200 font-medium">
+              <a href="#" className="font-medium text-white/60 transition hover:text-white">
                 Privacy Policy
               </a>
-              <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200 font-medium">
+              <a href="#" className="font-medium text-white/60 transition hover:text-white">
                 Terms of Service
-              </a>
-              <a href="#" className="text-gray-400 hover:text-orange-400 transition-colors duration-200 font-medium">
-                Cookie Policy
               </a>
             </div>
           </div>
@@ -621,10 +613,20 @@ function AppContent() {
   );
 }
 
+function isDemoContext() {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).has('theme') || window.location.pathname.startsWith('/demo');
+}
+
 export default function App() {
+  const showThemeSwitcher = isDemoContext();
+
   return (
     <AuthProvider>
-      <AppContent />
+      <>
+        <AppContent />
+        {showThemeSwitcher && <ThemeSwitcher />}
+      </>
     </AuthProvider>
   );
 }
