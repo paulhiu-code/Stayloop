@@ -1,6 +1,8 @@
 import type { ThemeId, ThemeMeta } from './types';
 
-export const DEFAULT_THEME: ThemeId = 'wander';
+// Production defaults to the current live look. Demo variations (wander, atlas)
+// remain available via the /demo picker and ?theme= links.
+export const DEFAULT_THEME: ThemeId = 'classic';
 
 export const THEMES: ThemeMeta[] = [
   {

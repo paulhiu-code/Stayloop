@@ -559,12 +559,19 @@ function AppContent() {
   );
 }
 
+function isDemoContext() {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).has('theme') || window.location.pathname.startsWith('/demo');
+}
+
 export default function App() {
+  const showThemeSwitcher = isDemoContext();
+
   return (
     <AuthProvider>
       <>
         <AppContent />
-        <ThemeSwitcher />
+        {showThemeSwitcher && <ThemeSwitcher />}
       </>
     </AuthProvider>
   );
