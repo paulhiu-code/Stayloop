@@ -619,7 +619,9 @@ function isDemoContext() {
 }
 
 export default function App() {
-  const showThemeSwitcher = isDemoContext();
+  // Computed once at mount (before any theme param is written), so normal
+  // visitors never see the demo switcher even if navigation adds params later.
+  const [showThemeSwitcher] = useState(() => isDemoContext());
 
   return (
     <AuthProvider>

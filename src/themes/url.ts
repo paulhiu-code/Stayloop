@@ -1,4 +1,4 @@
-import { isThemeId } from './config';
+import { DEFAULT_THEME, isThemeId } from './config';
 import type { ThemeId } from './types';
 
 export function withThemeParam(path: string, theme?: ThemeId | string | null): string {
@@ -7,7 +7,16 @@ export function withThemeParam(path: string, theme?: ThemeId | string | null): s
 
   const [pathname, search = ''] = path.split('?');
   const params = new URLSearchParams(search);
-  params.set('theme', themeId);
+
+  // Only preserve the theme in navigation URLs when it differs from the default
+  // (production) look, so normal browsing stays on clean, param-free URLs and the
+  // demo switcher stays hidden for regular visitors.
+  if (themeId === DEFAULT_THEME) {
+    params.delete('theme');
+  } else {
+    params.set('theme', themeId);
+  }
+
   const query = params.toString();
   return query ? `${pathname}?${query}` : pathname;
 }

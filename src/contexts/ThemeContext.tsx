@@ -17,15 +17,6 @@ function readThemeFromUrl(): ThemeId | null {
   return isThemeId(value) ? value : null;
 }
 
-function readThemeFromStorage(): ThemeId | null {
-  try {
-    const value = localStorage.getItem(STORAGE_KEY);
-    return isThemeId(value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-
 function persistTheme(theme: ThemeId) {
   try {
     localStorage.setItem(STORAGE_KEY, theme);
@@ -45,8 +36,12 @@ function applyThemeToDocument(theme: ThemeId) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  // Resolve from the URL param or fall back to the default (current) look.
+  // We intentionally do NOT read persisted storage on load, so the live site
+  // always shows the default theme for normal visitors; demo themes are opted
+  // into explicitly via /demo or a ?theme= link.
   const [theme, setThemeState] = useState<ThemeId>(() => {
-    return readThemeFromUrl() || readThemeFromStorage() || DEFAULT_THEME;
+    return readThemeFromUrl() || DEFAULT_THEME;
   });
 
   const setTheme = (next: ThemeId) => {
@@ -63,9 +58,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const fromUrl = readThemeFromUrl();
     if (fromUrl && fromUrl !== theme) {
       setThemeState(fromUrl);
-    } else if (!fromUrl) {
-      syncThemeQueryParam(theme);
     }
+    // Do not write the theme into the URL for normal visitors; the param is only
+    // added when a theme is explicitly chosen (setTheme) or already present in a
+    // demo link. This keeps production URLs clean and hides the demo switcher.
   }, [theme]);
 
   const value = useMemo(() => ({ theme, setTheme }), [theme]);
