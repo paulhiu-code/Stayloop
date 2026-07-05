@@ -7,5 +7,22 @@ verify_jwt = false
 [functions.pms-webhook-receiver]
 verify_jwt = false
 
+[functions.pms-ownerrez-sync]
+verify_jwt = true
+
+[functions.pms-guesty-sync]
+verify_jwt = true
+
+[functions.pms-hostaway-sync]
+verify_jwt = true
+
+# Public GET export (no JWT) + internal auth for import; function authenticates itself.
+[functions.channel-ical]
+verify_jwt = false
+
+# Called by the API server (service role) and by hosts; function authenticates itself.
+[functions.pms-push-reservation]
+verify_jwt = false
+
 [functions.send-email]
 verify_jwt = false

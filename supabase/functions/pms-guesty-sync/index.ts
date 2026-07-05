@@ -1,10 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
-};
+import { getCorsHeaders } from '../_shared/cors.ts';
+import { getGuestyToken, type PMSConnectionRow } from '../_shared/pms-auth.ts';
 
 interface GuestyListing {
   _id: string;
@@ -56,7 +52,18 @@ function createServiceSupabaseClient() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
+function isServiceRoleRequest(req: Request): boolean {
+  const serviceRoleKey = getServiceRoleKey();
+  if (!serviceRoleKey) return false;
+  const authHeader = req.headers.get('Authorization') ?? '';
+  const apiKeyHeader = req.headers.get('apikey') ?? '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  return token === serviceRoleKey || apiKeyHeader === serviceRoleKey;
+}
+
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -65,6 +72,13 @@ Deno.serve(async (req: Request) => {
     const supabase = createServiceSupabaseClient();
 
     const { action, pmsConnectionId, listingId, webhookData }: SyncRequest = await req.json();
+
+    if (action === 'webhook' && !isServiceRoleRequest(req)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Webhook processing requires internal authorization' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     let authedUserId: string | null = null;
     if (action !== 'webhook') {
@@ -98,7 +112,9 @@ Deno.serve(async (req: Request) => {
       throw new Error('PMS connection not found');
     }
 
-    const guestyToken = connection.oauth_access_token;
+    // Mint/refresh a token from client credentials (falls back to a directly
+    // stored token for legacy manual connections).
+    const guestyToken = await getGuestyToken(supabase, connection as PMSConnectionRow);
     const baseUrl = 'https://open-api.guesty.com/v1';
 
     // Create sync log
@@ -159,7 +175,7 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     console.error('Guesty sync error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

@@ -9,10 +9,13 @@ import {
   Clock,
   Trash2,
   Copy,
+  CalendarDays,
+  ArrowLeftRight,
+  Download,
 } from 'lucide-react';
 import {
   pmsProviders,
-  createPMSConnection,
+  createProviderConnection,
   getPMSConnections,
   syncPMSProperties,
   syncPMSBookings,
@@ -21,13 +24,29 @@ import {
   getPMSWebhookUrl,
   isPMSAutoSyncEnabled,
   setPMSAutoSync,
+  setPMSSyncDirection,
   getSyncLogs,
   deletePMSConnection,
   togglePMSConnection,
+  getHostProperties,
+  getICalExportUrl,
+  getICalFeeds,
+  addICalFeed,
+  deleteICalFeed,
+  importICalFeeds,
   type PMSConnection,
   type PMSSyncLog,
   type PMSProvider,
+  type PMSSyncDirection,
+  type HostProperty,
+  type ICalFeed,
 } from '../lib/pms';
+
+const SYNC_DIRECTION_LABELS: Record<PMSSyncDirection, string> = {
+  inbound: 'Import only (PMS → StayLoop)',
+  outbound: 'Export only (StayLoop → PMS)',
+  two_way: 'Two-way sync',
+};
 
 export default function PMSSettings() {
   const [connections, setConnections] = useState<PMSConnection[]>([]);
@@ -37,27 +56,46 @@ export default function PMSSettings() {
   const [showAddConnection, setShowAddConnection] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<PMSProvider | null>(null);
   const [accountName, setAccountName] = useState('');
-  const [accessToken, setAccessToken] = useState('');
-  const [refreshToken, setRefreshToken] = useState('');
+  const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
+  const [connectDirection, setConnectDirection] = useState<PMSSyncDirection>('two_way');
   const [creating, setCreating] = useState(false);
+
+  // iCal channel state
+  const [properties, setProperties] = useState<HostProperty[]>([]);
+  const [feeds, setFeeds] = useState<ICalFeed[]>([]);
+  const [newFeedProperty, setNewFeedProperty] = useState('');
+  const [newFeedUrl, setNewFeedUrl] = useState('');
+  const [newFeedLabel, setNewFeedLabel] = useState('');
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     loadConnections();
+    loadICal();
   }, []);
 
   const loadConnections = async () => {
     try {
       const data = await getPMSConnections();
       setConnections(data);
-
       for (const conn of data) {
         const logs = await getSyncLogs(conn.id, 10);
-        setSyncLogs(prev => ({ ...prev, [conn.id]: logs }));
+        setSyncLogs((prev) => ({ ...prev, [conn.id]: logs }));
       }
     } catch (error) {
       console.error('Failed to load connections:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadICal = async () => {
+    try {
+      const [props, feedList] = await Promise.all([getHostProperties(), getICalFeeds()]);
+      setProperties(props);
+      setFeeds(feedList);
+      if (props.length > 0 && !newFeedProperty) setNewFeedProperty(props[0].id);
+    } catch (error) {
+      console.error('Failed to load iCal data:', error);
     }
   };
 
@@ -98,6 +136,16 @@ export default function PMSSettings() {
     }
   };
 
+  const handleDirectionChange = async (connection: PMSConnection, direction: PMSSyncDirection) => {
+    try {
+      await setPMSSyncDirection(connection.id, direction);
+      await loadConnections();
+    } catch (error) {
+      console.error('Direction change failed:', error);
+      alert('Could not update sync direction. Please try again.');
+    }
+  };
+
   const copyWebhookUrl = async (connection: PMSConnection) => {
     const url = getPMSWebhookUrl(connection.id, connection.pms_provider);
     if (!url) {
@@ -106,9 +154,9 @@ export default function PMSSettings() {
     }
     try {
       await navigator.clipboard.writeText(url);
-      alert('Webhook URL copied. Paste it in OwnerRez → Settings → Webhooks.');
+      alert('Webhook URL copied. Paste it into your PMS webhook settings.');
     } catch {
-      prompt('Copy this webhook URL into OwnerRez:', url);
+      prompt('Copy this webhook URL into your PMS:', url);
     }
   };
 
@@ -122,10 +170,7 @@ export default function PMSSettings() {
   };
 
   const handleDelete = async (connectionId: string) => {
-    if (!confirm('Are you sure you want to remove this connection? All synced data will remain, but automatic sync will stop.')) {
-      return;
-    }
-
+    if (!confirm('Remove this connection? Synced data stays, but automatic sync stops.')) return;
     try {
       await deletePMSConnection(connectionId);
       await loadConnections();
@@ -137,21 +182,27 @@ export default function PMSSettings() {
   const resetConnectionForm = () => {
     setSelectedProvider(null);
     setAccountName('');
-    setAccessToken('');
-    setRefreshToken('');
+    setCredentialValues({});
+    setConnectDirection('two_way');
   };
+
+  const providerInfo = pmsProviders.find((p) => p.id === selectedProvider);
+
+  const requiredFieldsFilled = providerInfo
+    ? providerInfo.fields.every((f) => f.optional || credentialValues[f.key]?.trim())
+    : false;
 
   const handleCreateConnection = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selectedProvider || !accessToken.trim()) return;
+    if (!selectedProvider || !requiredFieldsFilled) return;
 
     setCreating(true);
     try {
-      await createPMSConnection(
+      await createProviderConnection(
         selectedProvider,
-        accessToken.trim(),
-        refreshToken.trim() || undefined,
-        accountName.trim() || undefined
+        accountName.trim(),
+        credentialValues,
+        connectDirection
       );
       resetConnectionForm();
       setShowAddConnection(false);
@@ -164,6 +215,57 @@ export default function PMSSettings() {
     }
   };
 
+  const copyExportUrl = async (property: HostProperty) => {
+    const url = getICalExportUrl(property);
+    if (!url) {
+      alert('Export URL unavailable for this property.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('StayLoop calendar URL copied. Paste it into Airbnb / VRBO / your PMS to import.');
+    } catch {
+      prompt('Copy this StayLoop calendar (iCal) URL:', url);
+    }
+  };
+
+  const handleAddFeed = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newFeedProperty || !newFeedUrl.trim()) return;
+    try {
+      await addICalFeed(newFeedProperty, newFeedUrl, newFeedLabel);
+      setNewFeedUrl('');
+      setNewFeedLabel('');
+      await loadICal();
+    } catch (error) {
+      console.error('Add feed failed:', error);
+      alert(error instanceof Error ? error.message : 'Could not add feed.');
+    }
+  };
+
+  const handleImportFeeds = async () => {
+    setImporting(true);
+    try {
+      await importICalFeeds();
+      await loadICal();
+      alert('Calendar import finished.');
+    } catch (error) {
+      console.error('Import failed:', error);
+      alert(error instanceof Error ? error.message : 'Import failed.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleDeleteFeed = async (feedId: string) => {
+    try {
+      await deleteICalFeed(feedId);
+      await loadICal();
+    } catch (error) {
+      console.error('Delete feed failed:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -173,11 +275,13 @@ export default function PMSSettings() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-extrabold text-gray-900">PMS Integrations</h2>
-          <p className="text-gray-600 mt-2">Connect your Property Management System to sync properties and bookings</p>
+          <p className="text-gray-600 mt-2">
+            Connect OwnerRez, Guesty, or Hostaway to sync properties, bookings, and calendars — two-way, in real time.
+          </p>
         </div>
         <button
           onClick={() => setShowAddConnection(true)}
@@ -198,17 +302,21 @@ export default function PMSSettings() {
                   setShowAddConnection(false);
                   resetConnectionForm();
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
               >
                 ×
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {pmsProviders.map((provider) => (
                 <div
                   key={provider.id}
-                  className="border-2 border-gray-200 rounded-2xl p-6 hover:border-orange-300 transition-all duration-300"
+                  className={`border-2 rounded-2xl p-6 transition-all duration-300 ${
+                    selectedProvider === provider.id
+                      ? 'border-orange-400 bg-orange-50/60'
+                      : 'border-gray-200 hover:border-orange-300'
+                  }`}
                 >
                   <div className="flex items-start justify-between mb-4">
                     <h4 className="text-xl font-bold text-gray-900">{provider.name}</h4>
@@ -232,10 +340,13 @@ export default function PMSSettings() {
                       className="flex items-center justify-center gap-2 w-full px-4 py-2 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition"
                     >
                       <ExternalLink className="w-4 h-4" />
-                      View Setup Guide
+                      Setup Guide
                     </a>
                     <button
-                      onClick={() => setSelectedProvider(provider.id)}
+                      onClick={() => {
+                        setSelectedProvider(provider.id);
+                        setCredentialValues({});
+                      }}
                       className="w-full px-4 py-2 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-bold rounded-xl hover:shadow-lg transition"
                     >
                       Connect {provider.name}
@@ -245,14 +356,16 @@ export default function PMSSettings() {
               ))}
             </div>
 
-            {selectedProvider && (
-              <form onSubmit={handleCreateConnection} className="mt-8 rounded-2xl border-2 border-orange-200 bg-orange-50/60 p-6">
+            {providerInfo && (
+              <form
+                onSubmit={handleCreateConnection}
+                className="mt-8 rounded-2xl border-2 border-orange-200 bg-orange-50/60 p-6"
+              >
                 <div className="mb-5">
-                  <h4 className="text-xl font-bold text-gray-900">
-                    Connect {pmsProviders.find(provider => provider.id === selectedProvider)?.name}
-                  </h4>
+                  <h4 className="text-xl font-bold text-gray-900">Connect {providerInfo.name}</h4>
                   <p className="mt-2 text-sm leading-6 text-gray-600">
-                    Paste your PMS API/OAuth access token to create a connection. For OwnerRez, request API access in OwnerRez and use the token provided for your account.
+                    Enter your {providerInfo.name} API credentials. StayLoop stores them securely and uses
+                    them only to sync your account.
                   </p>
                 </div>
 
@@ -261,34 +374,45 @@ export default function PMSSettings() {
                     <span className="mb-2 block text-sm font-semibold text-gray-700">Account name</span>
                     <input
                       value={accountName}
-                      onChange={(event) => setAccountName(event.target.value)}
-                      placeholder="Example: Paul OwnerRez Portfolio"
+                      onChange={(e) => setAccountName(e.target.value)}
+                      placeholder={`Example: My ${providerInfo.name} Portfolio`}
                       className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
                     />
                   </label>
 
                   <label className="block">
-                    <span className="mb-2 block text-sm font-semibold text-gray-700">Access token</span>
-                    <input
-                      value={accessToken}
-                      onChange={(event) => setAccessToken(event.target.value)}
-                      placeholder="Paste API/OAuth token"
-                      type="password"
-                      required
+                    <span className="mb-2 block text-sm font-semibold text-gray-700">Sync direction</span>
+                    <select
+                      value={connectDirection}
+                      onChange={(e) => setConnectDirection(e.target.value as PMSSyncDirection)}
                       className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                    />
+                    >
+                      {(Object.keys(SYNC_DIRECTION_LABELS) as PMSSyncDirection[]).map((dir) => (
+                        <option key={dir} value={dir}>
+                          {SYNC_DIRECTION_LABELS[dir]}
+                        </option>
+                      ))}
+                    </select>
                   </label>
 
-                  <label className="block md:col-span-2">
-                    <span className="mb-2 block text-sm font-semibold text-gray-700">Refresh token (optional)</span>
-                    <input
-                      value={refreshToken}
-                      onChange={(event) => setRefreshToken(event.target.value)}
-                      placeholder="Paste refresh token if OwnerRez provides one"
-                      type="password"
-                      className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                    />
-                  </label>
+                  {providerInfo.fields.map((field) => (
+                    <label key={field.key} className="block md:col-span-2">
+                      <span className="mb-2 block text-sm font-semibold text-gray-700">
+                        {field.label}
+                        {field.optional ? ' (optional)' : ''}
+                      </span>
+                      <input
+                        value={credentialValues[field.key] ?? ''}
+                        onChange={(e) =>
+                          setCredentialValues((prev) => ({ ...prev, [field.key]: e.target.value }))
+                        }
+                        placeholder={field.placeholder}
+                        type={field.secret ? 'password' : 'text'}
+                        required={!field.optional}
+                        className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                      />
+                    </label>
+                  ))}
                 </div>
 
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -301,7 +425,7 @@ export default function PMSSettings() {
                   </button>
                   <button
                     type="submit"
-                    disabled={creating || !accessToken.trim()}
+                    disabled={creating || !requiredFieldsFilled}
                     className="rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 px-5 py-3 font-bold text-white shadow-md transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {creating ? 'Connecting...' : 'Save connection'}
@@ -331,7 +455,7 @@ export default function PMSSettings() {
       ) : (
         <div className="space-y-6">
           {connections.map((connection) => {
-            const provider = pmsProviders.find(p => p.id === connection.pms_provider);
+            const provider = pmsProviders.find((p) => p.id === connection.pms_provider);
             const logs = syncLogs[connection.id] || [];
 
             return (
@@ -346,9 +470,7 @@ export default function PMSSettings() {
                     </div>
                     <div>
                       <h3 className="text-2xl font-bold text-gray-900">{provider?.name}</h3>
-                      {connection.account_name && (
-                        <p className="text-gray-600">{connection.account_name}</p>
-                      )}
+                      {connection.account_name && <p className="text-gray-600">{connection.account_name}</p>}
                       <div className="flex items-center gap-2 mt-1">
                         {connection.is_active ? (
                           <>
@@ -390,59 +512,82 @@ export default function PMSSettings() {
                   </div>
                 </div>
 
-                <div className="mb-6 rounded-2xl border border-orange-100 bg-orange-50/50 p-5">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h4 className="text-lg font-bold text-gray-900">Automatic sync</h4>
-                      <p className="mt-1 text-sm text-gray-600">
-                        When enabled, StayLoop runs scheduled syncs and processes OwnerRez webhooks for this
-                        connection.
-                      </p>
-                    </div>
-                    <label className="inline-flex cursor-pointer items-center gap-3">
-                      <span className="text-sm font-semibold text-gray-700">
-                        {isPMSAutoSyncEnabled(connection) ? 'On' : 'Off'}
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isPMSAutoSyncEnabled(connection)}
-                        onClick={() => handleAutoSyncToggle(connection)}
-                        disabled={!connection.is_active}
-                        className={`relative h-8 w-14 rounded-full transition ${
-                          isPMSAutoSyncEnabled(connection) ? 'bg-orange-500' : 'bg-gray-300'
-                        } disabled:cursor-not-allowed disabled:opacity-50`}
-                      >
-                        <span
-                          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition ${
-                            isPMSAutoSyncEnabled(connection) ? 'left-7' : 'left-1'
-                          }`}
-                        />
-                      </button>
-                    </label>
-                  </div>
-
-                  {connection.pms_provider === 'ownerrez' && (
-                    <div className="mt-4 border-t border-orange-100 pt-4">
-                      <p className="text-sm font-semibold text-gray-800">OwnerRez webhook URL</p>
-                      <p className="mt-1 text-xs text-gray-600">
-                        Add this URL in OwnerRez so booking and calendar changes sync without clicking Sync.
-                      </p>
-                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                        <code className="flex-1 truncate rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700">
-                          {getPMSWebhookUrl(connection.id, connection.pms_provider) || 'Configure VITE_SUPABASE_URL'}
-                        </code>
+                <div className="mb-6 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl border border-orange-100 bg-orange-50/50 p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-lg font-bold text-gray-900">Automatic sync</h4>
+                        <p className="mt-1 text-sm text-gray-600">
+                          Runs scheduled syncs and processes webhooks for this connection.
+                        </p>
+                      </div>
+                      <label className="inline-flex cursor-pointer items-center gap-3">
+                        <span className="text-sm font-semibold text-gray-700">
+                          {isPMSAutoSyncEnabled(connection) ? 'On' : 'Off'}
+                        </span>
                         <button
                           type="button"
-                          onClick={() => copyWebhookUrl(connection)}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                          role="switch"
+                          aria-checked={isPMSAutoSyncEnabled(connection)}
+                          onClick={() => handleAutoSyncToggle(connection)}
+                          disabled={!connection.is_active}
+                          className={`relative h-8 w-14 rounded-full transition ${
+                            isPMSAutoSyncEnabled(connection) ? 'bg-orange-500' : 'bg-gray-300'
+                          } disabled:cursor-not-allowed disabled:opacity-50`}
                         >
-                          <Copy className="h-4 w-4" />
-                          Copy URL
+                          <span
+                            className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition ${
+                              isPMSAutoSyncEnabled(connection) ? 'left-7' : 'left-1'
+                            }`}
+                          />
                         </button>
-                      </div>
+                      </label>
                     </div>
-                  )}
+                  </div>
+
+                  <div className="rounded-2xl border border-orange-100 bg-orange-50/50 p-5">
+                    <div className="flex items-center gap-2">
+                      <ArrowLeftRight className="h-5 w-5 text-orange-600" />
+                      <h4 className="text-lg font-bold text-gray-900">Sync direction</h4>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-600">
+                      Controls whether StayLoop bookings are pushed back to {provider?.name}.
+                    </p>
+                    <select
+                      value={connection.sync_direction}
+                      onChange={(e) =>
+                        handleDirectionChange(connection, e.target.value as PMSSyncDirection)
+                      }
+                      disabled={!connection.is_active}
+                      className="mt-3 w-full rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:opacity-50"
+                    >
+                      {(Object.keys(SYNC_DIRECTION_LABELS) as PMSSyncDirection[]).map((dir) => (
+                        <option key={dir} value={dir}>
+                          {SYNC_DIRECTION_LABELS[dir]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mb-6 rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                  <p className="text-sm font-semibold text-gray-800">Webhook URL</p>
+                  <p className="mt-1 text-xs text-gray-600">
+                    Add this in {provider?.name} so booking and calendar changes sync in real time.
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <code className="flex-1 truncate rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700">
+                      {getPMSWebhookUrl(connection.id, connection.pms_provider) || 'Configure VITE_SUPABASE_URL'}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => copyWebhookUrl(connection)}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy URL
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mb-6 flex flex-wrap gap-3">
@@ -451,11 +596,7 @@ export default function PMSSettings() {
                     disabled={syncing === connection.id || !connection.is_active}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-bold rounded-xl hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {syncing === connection.id ? (
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-5 h-5" />
-                    )}
+                    <RefreshCw className={`w-5 h-5 ${syncing === connection.id ? 'animate-spin' : ''}`} />
                     Sync Properties
                   </button>
                   <button
@@ -498,6 +639,9 @@ export default function PMSSettings() {
                             <div>
                               <p className="text-sm font-semibold text-gray-900">
                                 {log.sync_type.charAt(0).toUpperCase() + log.sync_type.slice(1)} Sync
+                                <span className="ml-2 text-xs font-normal text-gray-500">
+                                  {log.sync_direction === 'to_pms' ? '→ PMS' : '← PMS'}
+                                </span>
                               </p>
                               <p className="text-xs text-gray-500">
                                 {new Date(log.started_at).toLocaleString()}
@@ -529,6 +673,138 @@ export default function PMSSettings() {
           })}
         </div>
       )}
+
+      {/* Universal iCal channel */}
+      <div className="bg-white rounded-3xl p-8 border-2 border-gray-200 shadow-lg">
+        <div className="flex items-center gap-3 mb-2">
+          <CalendarDays className="w-7 h-7 text-orange-600" />
+          <h3 className="text-2xl font-extrabold text-gray-900">Calendar sync (iCal)</h3>
+        </div>
+        <p className="text-gray-600 mb-6">
+          Works with any platform — Airbnb, VRBO, or any PMS. Share StayLoop's calendar out, and import
+          external calendars in, to prevent double bookings.
+        </p>
+
+        <div className="grid gap-8 lg:grid-cols-2">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Download className="w-5 h-5 text-gray-500" />
+              <h4 className="text-lg font-bold text-gray-900">Export StayLoop calendars</h4>
+            </div>
+            {properties.length === 0 ? (
+              <p className="text-sm text-gray-500">You have no properties yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {properties.map((property) => (
+                  <div key={property.id} className="rounded-xl border border-gray-200 p-4">
+                    <p className="font-semibold text-gray-900">{property.title}</p>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <code className="flex-1 truncate rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                        {getICalExportUrl(property) || 'Save the property to generate a URL'}
+                      </code>
+                      <button
+                        onClick={() => copyExportUrl(property)}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        <Copy className="h-4 w-4" />
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-lg font-bold text-gray-900">Import external calendars</h4>
+              <button
+                onClick={handleImportFeeds}
+                disabled={importing || feeds.length === 0}
+                className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`h-4 w-4 ${importing ? 'animate-spin' : ''}`} />
+                Import now
+              </button>
+            </div>
+
+            <form onSubmit={handleAddFeed} className="space-y-3 rounded-xl border border-gray-200 p-4">
+              <select
+                value={newFeedProperty}
+                onChange={(e) => setNewFeedProperty(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-orange-400"
+              >
+                <option value="">Select property…</option>
+                {properties.map((property) => (
+                  <option key={property.id} value={property.id}>
+                    {property.title}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={newFeedLabel}
+                onChange={(e) => setNewFeedLabel(e.target.value)}
+                placeholder="Label (e.g. Airbnb, VRBO)"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-orange-400"
+              />
+              <input
+                value={newFeedUrl}
+                onChange={(e) => setNewFeedUrl(e.target.value)}
+                placeholder="https://…/calendar.ics"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-orange-400"
+              />
+              <button
+                type="submit"
+                disabled={!newFeedProperty || !newFeedUrl.trim()}
+                className="inline-flex items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-bold text-orange-700 hover:bg-orange-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="h-4 w-4" />
+                Add feed
+              </button>
+            </form>
+
+            {feeds.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {feeds.map((feed) => {
+                  const property = properties.find((p) => p.id === feed.property_id);
+                  return (
+                    <div
+                      key={feed.id}
+                      className="flex items-center justify-between rounded-xl border border-gray-200 p-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-900">
+                          {feed.label || 'Calendar feed'}
+                          <span className="ml-2 font-normal text-gray-500">{property?.title}</span>
+                        </p>
+                        <p className="truncate text-xs text-gray-500">{feed.feed_url}</p>
+                        {feed.last_import_status && (
+                          <p
+                            className={`text-xs ${
+                              feed.last_import_status === 'success' ? 'text-green-600' : 'text-red-600'
+                            }`}
+                          >
+                            {feed.last_import_status === 'success'
+                              ? `Imported ${feed.last_event_count} blocked night(s)`
+                              : `Failed: ${feed.last_import_error ?? 'unknown error'}`}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleDeleteFeed(feed.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

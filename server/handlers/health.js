@@ -20,13 +20,9 @@ export async function getDbHealth() {
   }
 
   const pool = getPool();
-  const result = await pool.query('SELECT current_database() AS db, now() AS server_time');
+  await pool.query('SELECT 1');
 
-  return {
-    ok: true,
-    database: result.rows[0]?.db,
-    serverTime: result.rows[0]?.server_time,
-  };
+  return { ok: true };
 }
 
 export async function getStripeHealth() {
@@ -35,12 +31,10 @@ export async function getStripeHealth() {
   }
 
   const stripe = getStripe();
-  const balance = await stripe.balance.retrieve();
+  await stripe.balance.retrieve();
 
   return {
     ok: true,
     mode: process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ? 'live' : 'test',
-    available: balance.available,
-    pending: balance.pending,
   };
 }

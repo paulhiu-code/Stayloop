@@ -1,11 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers':
-    'Content-Type, Authorization, X-Client-Info, Apikey, x-stayloop-cron-secret',
-};
+import { getCorsHeaders } from '../_shared/cors.ts';
 
 function getServiceRoleKey(): string | undefined {
   return (
@@ -41,13 +35,14 @@ function syncSettingsEnabled(syncSettings: unknown, key: string): boolean {
   return true;
 }
 
-async function invokeOwnerRezSync(
+async function invokeSync(
   supabaseUrl: string,
   serviceRoleKey: string,
   cronSecret: string,
+  functionName: string,
   body: Record<string, unknown>
 ) {
-  const response = await fetch(`${supabaseUrl}/functions/v1/pms-ownerrez-sync`, {
+  const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${serviceRoleKey}`,
@@ -73,6 +68,15 @@ async function invokeOwnerRezSync(
   }
 
   return payload;
+}
+
+function invokeOwnerRezSync(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  cronSecret: string,
+  body: Record<string, unknown>
+) {
+  return invokeSync(supabaseUrl, serviceRoleKey, cronSecret, 'pms-ownerrez-sync', body);
 }
 
 async function syncOwnerRezConnectionInChunks(
@@ -172,6 +176,8 @@ async function syncOwnerRezConnectionInChunks(
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -210,6 +216,33 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
+      if (connection.pms_provider === 'hostaway') {
+        try {
+          const payload = await invokeSync(
+            supabaseUrl,
+            serviceRoleKey,
+            cronSecret,
+            'pms-hostaway-sync',
+            { action: 'sync_all', pmsConnectionId: connection.id }
+          );
+          results.push({
+            connectionId: connection.id,
+            accountName: connection.account_name,
+            success: true,
+            result: payload?.result ?? payload,
+          });
+        } catch (syncError) {
+          console.error(`Hostaway scheduled sync failed for ${connection.id}:`, syncError);
+          results.push({
+            connectionId: connection.id,
+            accountName: connection.account_name,
+            success: false,
+            error: syncError instanceof Error ? syncError.message : 'Sync failed',
+          });
+        }
+        continue;
+      }
+
       if (connection.pms_provider !== 'ownerrez') {
         results.push({
           connectionId: connection.id,
@@ -244,11 +277,26 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Universal iCal channel: import all active external feeds (Airbnb/VRBO/PMS).
+    let icalResult: Record<string, unknown> | null = null;
+    try {
+      icalResult = await invokeSync(supabaseUrl, serviceRoleKey, cronSecret, 'channel-ical', {
+        action: 'import',
+      });
+    } catch (icalError) {
+      console.error('Scheduled iCal import failed:', icalError);
+      icalResult = {
+        success: false,
+        error: icalError instanceof Error ? icalError.message : 'iCal import failed',
+      };
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         connections: results.length,
         results,
+        ical: icalResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
