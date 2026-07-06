@@ -238,40 +238,68 @@ Deno.serve(async (req: Request) => {
       const html = renderTemplateString(body.html ?? template.html_body, variables);
       const text = renderTemplateString(body.text ?? template.text_body, variables);
 
-      const result = await sendEmailViaResend({
-        to,
-        subject,
-        html,
-        text,
-        tags: [{ name: 'trigger', value: triggerSlug }],
-      });
-
-      await logDelivery(supabase, {
-        trigger_id: trigger.id,
-        trigger_slug: trigger.slug,
-        template_id: template.id,
-        recipient: to,
-        subject,
-        status: 'sent',
-        provider_message_id: result.id,
-        metadata: {
-          variables,
-          version: template.version,
-          dedupe_key: typeof variables.dedupe_key === 'string' ? variables.dedupe_key : null,
-          booking_id: typeof variables.booking_id === 'string' ? variables.booking_id : null,
-        },
-      });
-
-      return jsonResponse(
-        {
-          ok: true,
-          messageId: result.id,
-          trigger: trigger.slug,
+      try {
+        const result = await sendEmailViaResend({
           to,
           subject,
-        },
-        corsHeaders
-      );
+          html,
+          text,
+          tags: [{ name: 'trigger', value: triggerSlug }],
+        });
+
+        try {
+          await logDelivery(supabase, {
+            trigger_id: trigger.id,
+            trigger_slug: trigger.slug,
+            template_id: template.id,
+            recipient: to,
+            subject,
+            status: 'sent',
+            provider_message_id: result.id,
+            metadata: {
+              variables,
+              version: template.version,
+              dedupe_key: typeof variables.dedupe_key === 'string' ? variables.dedupe_key : null,
+              booking_id: typeof variables.booking_id === 'string' ? variables.booking_id : null,
+            },
+          });
+        } catch (logError) {
+          console.error('Failed to log successful email delivery:', logError);
+        }
+
+        return jsonResponse(
+          {
+            ok: true,
+            messageId: result.id,
+            trigger: trigger.slug,
+            to,
+            subject,
+          },
+          corsHeaders
+        );
+      } catch (sendError) {
+        const message = sendError instanceof Error ? sendError.message : 'Failed to send email.';
+        try {
+          await logDelivery(supabase, {
+            trigger_id: trigger.id,
+            trigger_slug: trigger.slug,
+            template_id: template.id,
+            recipient: to,
+            subject,
+            status: 'failed',
+            error_message: message,
+            metadata: {
+              variables,
+              version: template.version,
+              dedupe_key: typeof variables.dedupe_key === 'string' ? variables.dedupe_key : null,
+              booking_id: typeof variables.booking_id === 'string' ? variables.booking_id : null,
+            },
+          });
+        } catch (logError) {
+          console.error('Failed to log failed email delivery:', logError);
+        }
+        return jsonResponse({ error: message }, corsHeaders, 502);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to send email.';
       return jsonResponse({ error: message }, corsHeaders, 502);

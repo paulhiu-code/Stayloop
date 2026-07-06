@@ -44,18 +44,6 @@ export function getEmailReplyToAddress(): string | undefined {
   );
 }
 
-export function getAdminEmailRecipients(): string[] {
-  const raw =
-    Deno.env.get('ADMIN_EMAIL_RECIPIENTS') ??
-    Deno.env.get('STAYLOOP_ADMIN_EMAIL_RECIPIENTS') ??
-    'alpha.media.solutions@outlook.com,paul.hiu@gmail.com';
-
-  return raw
-    .split(',')
-    .map((email) => email.trim())
-    .filter(Boolean);
-}
-
 export async function sendEmailViaResend(input: SendEmailInput): Promise<SendEmailResult> {
   const apiKey = getResendApiKey();
   const from = getEmailFromAddress();
