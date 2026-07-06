@@ -4,6 +4,9 @@
 [functions.pms-scheduled-sync]
 verify_jwt = false
 
+[functions.pms-outbound-processor]
+verify_jwt = false
+
 [functions.pms-webhook-receiver]
 verify_jwt = false
 
